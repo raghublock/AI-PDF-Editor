@@ -40,20 +40,32 @@ if uploaded_file:
     
     # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Niche palette se color code dekhein. Italic error fix kar diya gaya hai.")
+    st.info("Tip: Full Font Library integrated. Decimal font size (0.01) and custom BG support added.")
     
     with st.container():
         col1, col2 = st.columns(2)
         find_txt = col1.text_input("Find Text (Jo mitaana hai)")
         replace_txt = col2.text_input("Replace With (Naya word)")
         
-        # Extended Font Library & Decimal Support
         c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
-        all_fonts = ["helv", "cour", "tiro", "symb", "zadi", "heit", "hebo", "hebi", "hali", "haco"]
-        font_style = c1.selectbox("Font Theme", all_fonts)
-        f_size_manual = c2.number_input("Font Size", value=0.00, step=0.01, format="%.2f") # 2 Decimal support
+        
+        # COMPLETE BASE-14 FONT LIBRARY
+        # helv=Helvetica, tiro=Times, cour=Courier, symb=Symbol, zadi=ZapfDingbats
+        font_library = {
+            "Helvetica (Arial Style)": "helv",
+            "Times New Roman Style": "tiro",
+            "Courier (Typewriter Style)": "cour",
+            "Symbol": "symb",
+            "ZapfDingbats": "zadi"
+        }
+        selected_font_label = c1.selectbox("Font Theme", list(font_library.keys()))
+        font_style = font_library[selected_font_label]
+        
+        # Precision Point Size (2 Decimals)
+        f_size_manual = c2.number_input("Font Size", value=0.00, step=0.01, format="%.2f")
+        
         t_color_manual = c3.color_picker("Text Color", "#000000")
-        bg_color_manual = c4.color_picker("Background Patch Color", "#FFFFFF") # New BG color option
+        bg_color_manual = c4.color_picker("Background Patch Color", "#FFFFFF") 
 
         s1, s2, s3, s4 = st.columns([1, 1, 1, 3])
         is_bold = s1.checkbox("Bold")
@@ -64,31 +76,31 @@ if uploaded_file:
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
             
-            # Logic for Dynamic Font Name (Error Fix for Italic/Bold)
-            # PyMuPDF uses specific internal names for styles
-            font_map = {
-                "helv": ["helv", "hebo", "helt", "hebi"], # Helvetica variants
-                "tiro": ["tiro", "tibo", "tiit", "tibi"], # Times variants
-                "cour": ["cour", "cobo", "coit", "cobi"]  # Courier variants
+            # ADVANCED FONT MAPPING LOGIC
+            # Mapping Bold/Italic to internal PyMuPDF font names
+            style_map = {
+                "helv": ["helv", "hebo", "helt", "hebi"], # Normal, Bold, Italic, BoldItalic
+                "tiro": ["tiro", "tibo", "tiit", "tibi"], 
+                "cour": ["cour", "cobo", "coit", "cobi"]
             }
             
-            # Select proper font name based on toggles
-            if font_style in font_map:
+            if font_style in style_map:
+                # Binary index: 0=None, 1=Bold, 2=Italic, 3=Both
                 idx = (1 if is_bold else 0) + (2 if is_italic else 0)
-                final_font_name = font_map[font_style][idx]
+                final_font_name = style_map[font_style][idx]
             else:
-                final_font_name = font_style # Fallback for others
+                final_font_name = font_style # For symb or zadi
 
             for page in doc_edit:
                 areas = page.search_for(find_txt)
                 for rect in areas:
                     found = True
-                    # Step 1: Redaction with Custom Background Color
+                    # Step 1: Redaction with Custom BG
                     bg_rgb = tuple(int(bg_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     page.add_redact_annot(rect, fill=bg_rgb)
                     page.apply_redactions()
                     
-                    # Step 2: Overlay New Text
+                    # Step 2: Overlay with float size and chosen color
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
                     text_rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     
@@ -106,14 +118,14 @@ if uploaded_file:
             if found:
                 out = io.BytesIO()
                 doc_edit.save(out)
-                st.success("Edit Complete! Naya tab open karein.")
+                st.success("Edit Complete! Check below to open.")
                 open_pdf_in_new_tab(out.getvalue())
             else:
-                st.error("Text nahi mila!")
+                st.error("Bhai, text nahi mila! Spelling aur Caps check karein.")
 
     st.divider()
 
-    # ---------------------- VIEWER & ANALYZER ----------------------
+    # (Viewer and Analyzer section same rahega as per your previous code)
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
@@ -141,12 +153,10 @@ if uploaded_file:
     # ADVANCED ANALYZER
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     st.subheader("🔍 Advanced Document Analysis")
-    
     for page_num, page in enumerate(doc, start=1):
-        st.write(f"📄 Page {page_num} Details:")
+        st.write(f"📄 Page {page_num} Color Palette & Details:")
         all_colors = set()
         rows = []
-        
         blocks = page.get_text("dict")["blocks"]
         for b in blocks:
             if b['type'] == 0:
@@ -156,17 +166,13 @@ if uploaded_file:
                         hex_c = "#{:02x}{:02x}{:02x}".format((c >> 16) & 255, (c >> 8) & 255, c & 255)
                         all_colors.add(hex_c)
                         rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
-
         for draw in page.get_drawings():
             if "fill" in draw and draw["fill"]:
                 c = draw["fill"]
                 all_colors.add("#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255)))
-
         cp_cols = st.columns(15)
         for i, h_code in enumerate(list(all_colors)):
             with cp_cols[i % 15]:
                 st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True)
                 st.caption(h_code)
-
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text", width="large")})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text", width="large")})
