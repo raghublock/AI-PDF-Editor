@@ -11,13 +11,32 @@ st.set_page_config(
     layout="wide",
 )
 
-# ================== PREMIUM BLUE-ICE + BIG GLASS CARD UI ==================
+# ================== FORCE CSS OVERRIDE (IMPORTANT) ==================
 st.markdown("""
 <style>
 
-body {
-    background: linear-gradient(135deg, #cfeaff 0%, #e9f5ff 100%) !important;
-    font-family: 'Inter', sans-serif;
+:root {
+    --blue-ice-1: #cfeaff;
+    --blue-ice-2: #e9f5ff;
+    --blue-ice-strong: #0059b3;
+}
+
+/* FORCE REMOVE STREAMLIT DEFAULT PADDING */
+.main, .block-container {
+    padding-top: 0rem !important;
+    padding-left: 0rem !important;
+    padding-right: 0rem !important;
+}
+
+/* GLOBAL BACKGROUND */
+body, .stApp {
+    background: linear-gradient(135deg, var(--blue-ice-1) 0%, var(--blue-ice-2) 100%) !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* HIDING STREAMLIT DEFAULT HEADER & FOOTER */
+header, footer {
+    visibility: hidden !important;
 }
 
 /* BIG CENTER GLASS CARD */
@@ -35,23 +54,23 @@ body {
 }
 
 .big-glass-card h1 {
-    color: #0059b3;
+    color: var(--blue-ice-strong);
     font-size: 50px;
     font-weight: 900;
     margin-bottom: 5px;
 }
 
 .big-glass-card h3 {
-    color: #0059b3;
+    color: var(--blue-ice-strong);
     font-size: 22px;
     opacity: 0.8;
     margin-top: -10px;
 }
 
-/* Buttons – Blue Ice */
+/* Blue Ice Button */
 .blue-btn {
     background: linear-gradient(135deg, #2a7cc8 0%, #5bb2ff 100%);
-    color: white;
+    color: white !important;
     padding: 14px 20px;
     border: none;
     border-radius: 12px;
@@ -60,20 +79,42 @@ body {
     cursor: pointer;
     width: 100%;
     transition: 0.2s ease;
+    text-align: center;
 }
 .blue-btn:hover {
     transform: translateY(-3px);
     box-shadow: 0 6px 20px rgba(0, 110, 200, 0.3);
 }
 
-/* Scrollbar */
+/* Force Button Style */
+.stButton>button {
+    background: linear-gradient(135deg, #2a7cc8 0%, #5bb2ff 100%) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    height: 55px !important;
+    transition: 0.2s ease !important;
+}
+.stButton>button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 110, 200, 0.3) !important;
+}
+
+/* Inputs Force Style */
+input, textarea, select {
+    border-radius: 10px !important;
+    border: 1px solid #70aeea !important;
+    background: #ffffffdd !important;
+}
+
+/* Scrollbar Style */
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-thumb { background: #7bb6f0; border-radius: 6px; }
 ::-webkit-scrollbar-track { background: #e1efff; }
 
 </style>
 """, unsafe_allow_html=True)
-
 
 # ================== HEADER ==================
 st.markdown("""
@@ -84,7 +125,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("")  # spacing
-
 
 # ================== NEW TAB PDF OPEN ==================
 def open_pdf_in_new_tab(pdf_bytes):
@@ -108,13 +148,11 @@ def open_pdf_in_new_tab(pdf_bytes):
     """
     components.html(js_code, height=120)
 
-
 # ================== DEEP COLOR SCAN FUNCTION ==================
 def get_deep_page_colors(page):
     colors = set()
-
-    # Text color
     blocks = page.get_text("dict")["blocks"]
+
     for b in blocks:
         if b['type'] == 0:
             for l in b["lines"]:
@@ -122,7 +160,6 @@ def get_deep_page_colors(page):
                     c = s["color"]
                     colors.add("#{0:02x}{1:02x}{2:02x}".format((c>>16)&255,(c>>8)&255,c&255))
 
-    # Shapes / Background color
     for draw in page.get_drawings():
         if "fill" in draw and draw["fill"]:
             c = draw["fill"]
@@ -137,7 +174,6 @@ uploaded_file = st.file_uploader("📂 Upload Your PDF", type=["pdf"])
 if uploaded_file:
     pdf_bytes = uploaded_file.read()
 
-    # ============ SMART EDIT BOX ============
     st.markdown("### 📝 Smart AI Edit Controls")
     st.info("👇 Jo text change karna hai woh yahan set karein.")
 
@@ -172,7 +208,6 @@ if uploaded_file:
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
 
-            # Style map
             style_map = {
                 "helv": ["helv", "hebo", "helt", "hebi"],
                 "tiro": ["tiro", "tibo", "tiit", "tibi"],
@@ -206,9 +241,11 @@ if uploaded_file:
                     )
 
                     if is_underline:
-                        page.draw_line(fitz.Point(rect.x0, rect.y1),
-                                       fitz.Point(rect.x1, rect.y1),
-                                       color=txt_rgb, width=1)
+                        page.draw_line(
+                            fitz.Point(rect.x0, rect.y1),
+                            fitz.Point(rect.x1, rect.y1),
+                            color=txt_rgb, width=1
+                        )
 
             if found:
                 out = io.BytesIO()
@@ -276,7 +313,12 @@ if uploaded_file:
                     for s in l["spans"]:
                         c = s["color"]
                         hex_c = "#{:02x}{:02x}{:02x}".format((c>>16)&255,(c>>8)&255,c&255)
-                        rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
+                        rows.append({
+                            "Text": s["text"],
+                            "Font": s["font"],
+                            "Size": round(s["size"], 2),
+                            "Color": hex_c
+                        })
 
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True, hide_index=True)
