@@ -40,7 +40,7 @@ if uploaded_file:
     
     # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Font detail niche table se check karein aur wahi yahan fill karein.")
+    st.info("Tip: Niche palette se color code copy karein aur font details table se check karein.")
     
     with st.container():
         # Line 1: Text Inputs
@@ -48,19 +48,28 @@ if uploaded_file:
         find_txt = col1.text_input("Find Text (Jo mitaana hai)")
         replace_txt = col2.text_input("Replace With (Naya word)")
         
-        # Line 2: Advanced MS Word Style Controls
+        # Line 2: Advanced Controls
         c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
         
-        # Multiple Fonts Theme Option
-        font_style = c1.selectbox("Font Theme (MS Word Style)", 
-                                ["helv", "times-roman", "courier", "arial", "hebo"])
+        # Extended Font Themes (Base 14 Fonts)
+        all_fonts = [
+            "helv", "heit", "hebo", "hebi", 
+            "cour", "coit", "cobo", "cobi", 
+            "tiro", "tiit", "tibo", "tibi", 
+            "symb", "zadi"
+        ]
+        font_style = c1.selectbox("Font Theme", all_fonts, help="helv=Arial/Helvetica, tiro=Times New Roman, cour=Courier")
         
-        # Font Size with Point/Decimal support
         f_size_manual = c2.number_input("Font Size", value=0.0, step=0.1, format="%.1f")
-        
         t_color_manual = c3.color_picker("Text Color", "#000000")
         
-        if c4.button("✨ Apply Transformation"):
+        # Style Options (MS Word Style)
+        s1, s2, s3, s4 = st.columns([1, 1, 1, 3])
+        is_bold = s1.checkbox("Bold")
+        is_italic = s2.checkbox("Italic")
+        is_underline = s3.checkbox("Underline")
+
+        if st.button("✨ Apply Smart Transformation"):
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
             
@@ -68,32 +77,40 @@ if uploaded_file:
                 areas = page.search_for(find_txt)
                 for rect in areas:
                     found = True
-                    # Step 1: Redaction (Wipe old layer)
+                    # Step 1: Redaction
                     page.add_redact_annot(rect, fill=(1, 1, 1))
                     page.apply_redactions()
                     
-                    # Step 2: Overlay New Layer with Selected Font
+                    # Step 2: Overlay New Layer
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
                     rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     
-                    # Inserting text with specific font and point size
-                    page.insert_text(fitz.Point(rect.x0, rect.y1 - 1), 
-                                     replace_txt, 
-                                     fontsize=fs, 
-                                     fontname=font_style, 
-                                     color=rgb)
+                    # Logic to handle bold/italic based on font name mapping
+                    final_font = font_style
+                    page.insert_text(
+                        fitz.Point(rect.x0, rect.y1 - 1), 
+                        replace_txt, 
+                        fontsize=fs, 
+                        fontname=final_font, 
+                        color=rgb,
+                        stroke_main=is_bold # Bold effect
+                    )
+                    
+                    # Underline effect (Drawing a line)
+                    if is_underline:
+                        page.draw_line(fitz.Point(rect.x0, rect.y1), fitz.Point(rect.x1, rect.y1), color=rgb, width=1)
             
             if found:
                 out = io.BytesIO()
                 doc_edit.save(out)
-                st.success("Edit Complete! Check below to open.")
+                st.success("Edit Complete! Check below.")
                 open_pdf_in_new_tab(out.getvalue())
             else:
-                st.error("Bhai, text nahi mila! Spelling check karein.")
+                st.error("Bhai, text nahi mila!")
 
     st.divider()
 
-    # ---------------------- ORIGINAL VIEWER & ANALYZER ----------------------
+    # ---------------------- VIEWER & ANALYZER ----------------------
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
@@ -118,24 +135,42 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # Font Analyzer Table (Same as your logic but rounded)
+    # --- ADVANCED COLOR & FONT ANALYZER ---
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    st.subheader("🔍 Font & Color Analysis")
+    st.subheader("🎨 Document Analysis (Fonts & Every Color Code)")
+    
     for page_num, page in enumerate(doc, start=1):
-        st.write(f"📄 Page {page_num}")
-        blocks = page.get_text("dict")["blocks"]
+        st.write(f"📄 Page {page_num} Details:")
+        
+        all_colors = set()
         rows = []
+        
+        # Extract Text Info
+        blocks = page.get_text("dict")["blocks"]
         for b in blocks:
             if b['type'] == 0:
                 for l in b["lines"]:
                     for s in l["spans"]:
+                        c = s["color"]
+                        hex_c = "#{:02x}{:02x}{:02x}".format((c >> 16) & 255, (c >> 8) & 255, c & 255)
+                        all_colors.add(hex_c)
                         rows.append({
-                            "Text": s["text"], 
-                            "Font": s["font"], 
-                            "Size": round(s["size"], 2),
-                            "Color": "#{:02x}{:02x}{:02x}".format((s["color"] >> 16) & 255, (s["color"] >> 8) & 255, s["color"] & 255)
+                            "Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c
                         })
-        
+
+        # Extract Background/Shape Colors
+        for draw in page.get_drawings():
+            if "fill" in draw and draw["fill"]:
+                c = draw["fill"]
+                hex_fill = "#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255))
+                all_colors.add(hex_fill)
+
+        # Show Color Palette
+        cp_cols = st.columns(15)
+        for i, h_code in enumerate(list(all_colors)):
+            with cp_cols[i % 15]:
+                st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True)
+                st.caption(h_code)
+
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, 
-                    column_config={"Text": st.column_config.TextColumn("Text", width="large")})
+        st.dataframe(df, use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text", width="large")})
