@@ -3,8 +3,9 @@ import fitz  # PyMuPDF
 import pandas as pd
 import base64
 import io
-from PIL import Image
 import streamlit.components.v1 as components
+from pdf2image import convert_from_bytes # OCR Support
+import pytesseract # OCR Support
 
 st.set_page_config(page_title="Pro AI PDF Editor - Raghu", layout="wide")
 
@@ -29,77 +30,192 @@ def open_pdf_in_new_tab(pdf_bytes):
     }}
     </script>
     <button onclick="openPDF()" style="background-color: #4CAF50; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-size: 18px; font-weight: bold;">
-        🔓 Open & Print PDF
+        🔓 Open & Print Edited PDF
     </button>
     """
     components.html(js_code, height=100)
 
-# ---------------------- MAIN NAVIGATION ----------------------
-st.markdown("### 🛠️ Choose a Feature to Use")
-col_bt1, col_bt2, col_bt3, col_bt4, col_bt5 = st.columns(5)
-if "mode" not in st.session_state: st.session_state.mode = "Editor"
+uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
-if col_bt1.button("✏️ Smart Editor"): st.session_state.mode = "Editor"
-if col_bt2.button("🔗 Merge PDFs"): st.session_state.mode = "Merge"
-if col_bt3.button("✂️ Split PDF"): st.session_state.mode = "Split"
-if col_bt4.button("🖼️ Image to PDF"): st.session_state.mode = "ImgToPdf"
-if col_bt5.button("🔍 Other Tools"): st.session_state.mode = "Others"
+if uploaded_file:
+    pdf_bytes = uploaded_file.read()
 
-# ---------------------- 1. MERGE PDFs ----------------------
-if st.session_state.mode == "Merge":
-    st.subheader("🔗 Merge Multiple PDFs")
-    merge_files = st.file_uploader("Upload PDFs to Merge", type=["pdf"], accept_multiple_files=True)
-    if st.button("🚀 Merge Now") and merge_files:
-        result_pdf = fitz.open()
-        for f in merge_files:
-            with fitz.open(stream=f.read(), filetype="pdf") as m_pdf:
-                result_pdf.insert_pdf(m_pdf)
-        out = io.BytesIO()
-        result_pdf.save(out)
-        st.success("PDFs Merged Successfully!")
-        open_pdf_in_new_tab(out.getvalue())
+    # ---------------------- FEATURE MENU ----------------------
+    st.markdown("### 🛠️ Choose a Feature to Use")
+    col_bt1, col_bt2, col_bt3, col_bt4, col_bt5 = st.columns(5)
+    
+    if "mode" not in st.session_state: st.session_state.mode = "Editor"
+    
+    if col_bt1.button("✏️ Smart Editor"): st.session_state.mode = "Editor"
+    if col_bt2.button("🔍 Replace All"): st.session_state.mode = "ReplaceAll"
+    if col_bt3.button("🖼️ PDF to Image"): st.session_state.mode = "ToImage"
+    if col_bt4.button("📝 PDF to Text"): st.session_state.mode = "ToText"
+    if col_bt5.button("🤖 Smart OCR"): st.session_state.mode = "OCR"
 
-# ---------------------- 2. SPLIT PDF ----------------------
-elif st.session_state.mode == "Split":
-    st.subheader("✂️ Split PDF Pages")
-    split_file = st.file_uploader("Upload PDF to Split", type=["pdf"])
-    if split_file:
-        doc = fitz.open(stream=split_file.read(), filetype="pdf")
-        page_num = st.number_input("Enter Page Number to Extract", 1, len(doc), 1)
-        if st.button("🚀 Extract Page"):
-            new_doc = fitz.open()
-            new_doc.insert_pdf(doc, from_page=page_num-1, to_page=page_num-1)
-            out = io.BytesIO()
-            new_doc.save(out)
-            st.success(f"Page {page_num} Extracted!")
-            open_pdf_in_new_tab(out.getvalue())
+    # ---------------------- POINT 4: SMART OCR (FIXED) ----------------------
+    if st.session_state.mode == "OCR":
+        st.info("🤖 AI Scanning: Scanned PDF se text nikalne ke liye.")
+        if st.button("🔍 Start Deep OCR Scan"):
+            with st.spinner("AI is reading the images (Poppler/Tesseract required)..."):
+                try:
+                    # PDF to Images
+                    images = convert_from_bytes(pdf_bytes)
+                    full_ocr_text = ""
+                    for i, image in enumerate(images):
+                        # AI Image to Text
+                        text = pytesseract.image_to_string(image)
+                        full_ocr_text += f"--- Page {i+1} ---\n{text}\n\n"
+                    
+                    st.text_area("OCR Extracted Text", full_ocr_text, height=400)
+                    st.download_button("Download OCR Text", full_ocr_text, "ocr_result.txt")
+                except Exception as e:
+                    # User-friendly error message if poppler is missing
+                    st.error("Error: Poppler ya Tesseract install nahi hai. Please check packages.txt on GitHub.")
+                    st.code(f"Technical Detail: {str(e)}")
 
-# ---------------------- 3. IMAGE TO PDF ----------------------
-elif st.session_state.mode == "ImgToPdf":
-    st.subheader("🖼️ Convert Images to PDF")
-    uploaded_imgs = st.file_uploader("Upload JPEG/PNG Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-    if st.button("🚀 Convert to PDF") and uploaded_imgs:
-        img_doc = fitz.open()
-        for img_file in uploaded_imgs:
-            img = Image.open(img_file)
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='PDF')
-            with fitz.open(stream=img_byte_arr.getvalue(), filetype="pdf") as f:
-                img_doc.insert_pdf(f)
-        out = io.BytesIO()
-        img_doc.save(out)
-        st.success("Images Converted to PDF!")
-        open_pdf_in_new_tab(out.getvalue())
+    # ---------------------- POINT 1: GLOBAL REPLACE ----------------------
+    elif st.session_state.mode == "ReplaceAll":
+        f_all = st.text_input("Find everywhere")
+        r_all = st.text_input("Replace everywhere")
+        if st.button("🚀 Global Update"):
+            doc_all = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for page in doc_all:
+                for rect in page.search_for(f_all):
+                    page.add_redact_annot(rect, fill=(1,1,1))
+                    page.apply_redactions()
+                    page.insert_text(fitz.Point(rect.x0, rect.y1-1), r_all, fontname="helv", fontsize=10)
+            out_all = io.BytesIO()
+            doc_all.save(out_all)
+            open_pdf_in_new_tab(out_all.getvalue())
 
-# ---------------------- 4. SMART EDITOR (YOUR ORIGINAL CODE) ----------------------
-elif st.session_state.mode == "Editor":
-    uploaded_file = st.file_uploader("Upload PDF for Editing", type=["pdf"])
-    if uploaded_file:
-        pdf_bytes = uploaded_file.read()
+    # ---------------------- POINT 2: PDF TO IMAGE ----------------------
+    elif st.session_state.mode == "ToImage":
+        doc_img = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for i in range(len(doc_img)):
+            pix = doc_img[i].get_pixmap()
+            st.image(pix.tobytes("png"), caption=f"Page {i+1}")
+            st.download_button(f"Download Page {i+1}", pix.tobytes("png"), f"page_{i+1}.png")
+
+    # ---------------------- POINT 3: PDF TO TEXT ----------------------
+    elif st.session_state.mode == "ToText":
+        doc_txt = fitz.open(stream=pdf_bytes, filetype="pdf")
+        full_text = "".join([p.get_text() for p in doc_txt])
+        st.text_area("Plain Extracted Text", full_text, height=300)
+        st.download_button("Download Text File", full_text, "text.txt")
+
+    # ---------------------- ORIGINAL SMART EDITOR (UNTOUCHED) ----------------------
+    elif st.session_state.mode == "Editor":
         st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-        # ... (Tumhara original Editor ka logic yahan aayega) ...
-        # Maine brevity ke liye use yahan summarize kiya hai, 
-        # tum apna purana logic yahan paste kar sakte ho.
-        st.info("Bhai, Editor mode active hai. Niche table check karein.")
+        with st.container():
+            col1, col2 = st.columns(2)
+            find_txt = col1.text_input("Find Text")
+            replace_txt = col2.text_input("Replace With")
+            c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
+            
+            font_library = {
+                "Helvetica (Arial Style)": "helv",
+                "Times New Roman Style": "tiro",
+                "Courier (Typewriter Style)": "cour",
+                "Symbol": "symb",
+                "ZapfDingbats": "zadi"
+            }
+            selected_font_label = c1.selectbox("Font Theme", list(font_library.keys()))
+            font_style = font_library[selected_font_label]
+            
+            f_size_manual = c2.number_input("Font Size", value=0.00, step=0.01, format="%.2f")
+            t_color_manual = c3.color_picker("Text Color", "#000000")
+            bg_color_manual = c4.color_picker("Background Patch Color", "#FFFFFF") 
+            
+            s1, s2, s3 = st.columns(3)
+            is_bold = s1.checkbox("Bold")
+            is_italic = s2.checkbox("Italic")
+            is_underline = s3.checkbox("Underline")
 
-# (Baki Viewer aur Analyzer logic niche waisa hi rahega)
+            if st.button("✨ Apply Smart Transformation"):
+                doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
+                found = False
+                
+                style_map = {
+                    "helv": ["helv", "hebo", "helt", "hebi"],
+                    "tiro": ["tiro", "tibo", "tiit", "tibi"], 
+                    "cour": ["cour", "cobo", "coit", "cobi"]
+                }
+                
+                idx = (1 if is_bold else 0) + (2 if is_italic else 0)
+                fname = style_map[font_style][idx] if font_style in style_map else font_style
+
+                for page in doc_edit:
+                    areas = page.search_for(find_txt)
+                    for rect in areas:
+                        found = True
+                        bg_rgb = tuple(int(bg_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
+                        page.add_redact_annot(rect, fill=bg_rgb)
+                        page.apply_redactions()
+                        
+                        fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
+                        rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
+                        
+                        page.insert_text(
+                            fitz.Point(rect.x0, rect.y1 - 1), 
+                            replace_txt, 
+                            fontsize=fs, 
+                            fontname=fname, 
+                            color=rgb
+                        )
+                        
+                        if is_underline:
+                            page.draw_line(fitz.Point(rect.x0, rect.y1), fitz.Point(rect.x1, rect.y1), color=rgb, width=1)
+                
+                if found:
+                    out = io.BytesIO()
+                    doc_edit.save(out)
+                    st.success("Edit Complete! Check below to open.")
+                    open_pdf_in_new_tab(out.getvalue())
+                else:
+                    st.error("Bhai, text nahi mila! Spelling aur Caps check karein.")
+
+    st.divider()
+
+    # ---------------------- VIEWER & ANALYZER (UNTOUCHED) ----------------------
+    zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
+    base64_pdf = base64.b64encode(pdf_bytes).decode()
+    pdf_viewer_html = f"""
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+        <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
+        <script>
+            const pdfData = atob("{base64_pdf}");
+            pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
+                const container = document.getElementById("container");
+                for (let i = 1; i <= pdf.numPages; i++) {{
+                    pdf.getPage(i).then(page => {{
+                        const viewport = page.getViewport({{ scale: {zoom/100} }});
+                        const canvas = document.createElement("canvas");
+                        canvas.width = viewport.width; canvas.height = viewport.height;
+                        container.appendChild(canvas);
+                        page.render({{ canvasContext: canvas.getContext("2d"), viewport: viewport }});
+                    }});
+                }}
+            }});
+        </script>
+    """
+    st.components.v1.html(pdf_viewer_html, height=550)
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    st.subheader("🔍 Advanced Document Analysis")
+    for page_num, page in enumerate(doc, start=1):
+        st.write(f"📄 Page {page_num}")
+        all_colors = set(); rows = []
+        blocks = page.get_text("dict")["blocks"]
+        for b in blocks:
+            if b['type'] == 0:
+                for l in b["lines"]:
+                    for s in l["spans"]:
+                        c = s["color"]; hex_c = "#{:02x}{:02x}{:02x}".format((c >> 16) & 255, (c >> 8) & 255, c & 255); all_colors.add(hex_c); rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
+        for draw in page.get_drawings():
+            if "fill" in draw and draw["fill"]:
+                c = draw["fill"]; all_colors.add("#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255)))
+        cp_cols = st.columns(15)
+        for i, h_code in enumerate(list(all_colors)):
+            with cp_cols[i % 15]: st.markdown(f"<div style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True); st.caption(h_code)
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text (Quick Copy)", width="large")}, hide_index=True)
+        
