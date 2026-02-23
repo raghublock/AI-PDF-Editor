@@ -5,9 +5,70 @@ import base64
 import io
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Pro AI PDF Editor - Raghu", layout="wide")
+# ========== GLOBAL PAGE CONFIG ==========
+st.set_page_config(
+    page_title="Pro AI PDF Editor - Raghu",
+    layout="wide",
+)
 
-st.title("📄 AI PDF Analyzer & Smart Editor – Made by Raghu 🚀")
+# ========== PREMIUM BLUE ICE GLOBAL CSS ==========
+st.markdown("""
+<style>
+
+body {
+    background: linear-gradient(135deg, #d8eefe 0%, #eef7ff 100%) !important;
+}
+
+/* === GLASS BIG CARD HEADER === */
+.glass-header {
+    width: 100%;
+    padding: 35px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.2);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+.glass-header h1 {
+    color: #004b90;
+    font-size: 42px;
+    margin-bottom: -5px;
+    font-weight: 900;
+}
+
+.glass-header h3 {
+    color: #004b90;
+    opacity: 0.8;
+    font-weight: 600;
+}
+
+/* Scrollbar blue-ice */
+::-webkit-scrollbar {
+    width: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: #7bb6f0;
+    border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #e1efff;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ======= GLASS HEADER =======
+st.markdown("""
+<div class="glass-header">
+    <h1>🔮 Pro AI PDF Editor</h1>
+    <h3>Made by Raghu — Blue Ice Edition</h3>
+</div>
+""", unsafe_allow_html=True)
+
+st.title("")  # needed to push layout slightly
+
 
 # Sidebar for Navigation & New Tab Logic
 def open_pdf_in_new_tab(pdf_bytes):
@@ -27,7 +88,7 @@ def open_pdf_in_new_tab(pdf_bytes):
         window.open(fileURL, '_blank');
     }}
     </script>
-    <button onclick="openPDF()" style="background-color: #4CAF50; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-size: 18px; font-weight: bold;">
+    <button onclick="openPDF()" style="background-color:#2a7cc8; color:white; padding:15px; border:none; border-radius:10px; cursor:pointer; width:100%; font-size:18px; font-weight:bold;">
         🔓 Open & Print Edited PDF
     </button>
     """
@@ -146,7 +207,7 @@ if uploaded_file:
     
     pdf_viewer_html = f"""
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-        <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
+        <div id="container" style="height:500px; overflow-y:scroll; background:#e6f3ff; padding:10px; border-radius:12px;"></div>
         <script>
             const pdfData = atob("{base64_pdf}");
             pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
@@ -156,6 +217,7 @@ if uploaded_file:
                         const viewport = page.getViewport({{ scale: {zoom/100} }});
                         const canvas = document.createElement("canvas");
                         canvas.width = viewport.width; canvas.height = viewport.height;
+                        canvas.style.marginBottom = "15px";
                         container.appendChild(canvas);
                         page.render({{ canvasContext: canvas.getContext("2d"), viewport: viewport }});
                     }});
@@ -189,7 +251,7 @@ if uploaded_file:
         cp_cols = st.columns(15)
         for i, h_code in enumerate(list(all_colors)):
             with cp_cols[i % 15]:
-                st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True)
+                st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:6px;background:{h_code};border:1px solid #004b90'></div>", unsafe_allow_html=True)
                 st.caption(h_code)
 
         # UPDATED TABLE WITH COPY FEATURE
@@ -203,4 +265,3 @@ if uploaded_file:
             },
             hide_index=True
         )
-        
