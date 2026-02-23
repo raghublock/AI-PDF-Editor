@@ -40,7 +40,7 @@ if uploaded_file:
     
     # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Niche table se text copy karke 'Find Text' mein paste karein.")
+    st.info("Tip: Full Font Library integrated. Decimal font size (0.01) and custom BG support added.")
     
     with st.container():
         col1, col2 = st.columns(2)
@@ -49,6 +49,8 @@ if uploaded_file:
         
         c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
         
+        # COMPLETE BASE-14 FONT LIBRARY
+        # helv=Helvetica, tiro=Times, cour=Courier, symb=Symbol, zadi=ZapfDingbats
         font_library = {
             "Helvetica (Arial Style)": "helv",
             "Times New Roman Style": "tiro",
@@ -59,7 +61,9 @@ if uploaded_file:
         selected_font_label = c1.selectbox("Font Theme", list(font_library.keys()))
         font_style = font_library[selected_font_label]
         
+        # Precision Point Size (2 Decimals)
         f_size_manual = c2.number_input("Font Size", value=0.00, step=0.01, format="%.2f")
+        
         t_color_manual = c3.color_picker("Text Color", "#000000")
         bg_color_manual = c4.color_picker("Background Patch Color", "#FFFFFF") 
 
@@ -72,26 +76,31 @@ if uploaded_file:
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
             
+            # ADVANCED FONT MAPPING LOGIC
+            # Mapping Bold/Italic to internal PyMuPDF font names
             style_map = {
-                "helv": ["helv", "hebo", "helt", "hebi"],
+                "helv": ["helv", "hebo", "helt", "hebi"], # Normal, Bold, Italic, BoldItalic
                 "tiro": ["tiro", "tibo", "tiit", "tibi"], 
                 "cour": ["cour", "cobo", "coit", "cobi"]
             }
             
             if font_style in style_map:
+                # Binary index: 0=None, 1=Bold, 2=Italic, 3=Both
                 idx = (1 if is_bold else 0) + (2 if is_italic else 0)
                 final_font_name = style_map[font_style][idx]
             else:
-                final_font_name = font_style
+                final_font_name = font_style # For symb or zadi
 
             for page in doc_edit:
                 areas = page.search_for(find_txt)
                 for rect in areas:
                     found = True
+                    # Step 1: Redaction with Custom BG
                     bg_rgb = tuple(int(bg_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     page.add_redact_annot(rect, fill=bg_rgb)
                     page.apply_redactions()
                     
+                    # Step 2: Overlay with float size and chosen color
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
                     text_rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     
@@ -116,7 +125,7 @@ if uploaded_file:
 
     st.divider()
 
-    # ---------------------- VIEWER ----------------------
+    # (Viewer and Analyzer section same rahega as per your previous code)
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
@@ -141,12 +150,11 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # ---------------------- ADVANCED ANALYZER WITH COPY ----------------------
+    # ADVANCED ANALYZER
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    st.subheader("🔍 Advanced Document Analysis (Hover to Copy)")
-    
+    st.subheader("🔍 Advanced Document Analysis")
     for page_num, page in enumerate(doc, start=1):
-        st.write(f"📄 Page {page_num} Details:")
+        st.write(f"📄 Page {page_num} Color Palette & Details:")
         all_colors = set()
         rows = []
         blocks = page.get_text("dict")["blocks"]
@@ -158,25 +166,13 @@ if uploaded_file:
                         hex_c = "#{:02x}{:02x}{:02x}".format((c >> 16) & 255, (c >> 8) & 255, c & 255)
                         all_colors.add(hex_c)
                         rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
-        
-        # Displaying Colors
+        for draw in page.get_drawings():
+            if "fill" in draw and draw["fill"]:
+                c = draw["fill"]
+                all_colors.add("#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255)))
         cp_cols = st.columns(15)
         for i, h_code in enumerate(list(all_colors)):
             with cp_cols[i % 15]:
                 st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True)
                 st.caption(h_code)
-
-        # TABLE COPY FEATURE ENABLED
-        df = pd.DataFrame(rows)
-        st.dataframe(
-            df, 
-            use_container_width=True, 
-            column_config={
-                "Text": st.column_config.TextColumn(
-                    "Text (Click icon to copy)", 
-                    width="large",
-                    required=True
-                )
-            },
-            hide_index=True # Index hatane se copy karna asaan ho jata hai
-        )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text", width="large")})
