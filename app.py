@@ -38,20 +38,29 @@ uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 if uploaded_file:
     pdf_bytes = uploaded_file.read()
     
-    # ---------------------- SMART AI EDIT SECTION (NEW LINE) ----------------------
+    # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Ye purane text layer ko hatakar (Redaction) nayi layer usi jagah fit karta hai.")
+    st.info("Tip: Font detail niche table se check karein aur wahi yahan fill karein.")
     
     with st.container():
+        # Line 1: Text Inputs
         col1, col2 = st.columns(2)
         find_txt = col1.text_input("Find Text (Jo mitaana hai)")
         replace_txt = col2.text_input("Replace With (Naya word)")
         
-        c1, c2, c3 = st.columns([2, 1, 1])
-        f_size_manual = c1.number_input("Font Size (0 = Auto Match)", 0, 100, 0)
-        t_color_manual = c2.color_picker("Text Color", "#000000")
+        # Line 2: Advanced MS Word Style Controls
+        c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
         
-        if c3.button("✨ Apply Smart Transformation"):
+        # Multiple Fonts Theme Option
+        font_style = c1.selectbox("Font Theme (MS Word Style)", 
+                                ["helv", "times-roman", "courier", "arial", "hebo"])
+        
+        # Font Size with Point/Decimal support
+        f_size_manual = c2.number_input("Font Size", value=0.0, step=0.1, format="%.1f")
+        
+        t_color_manual = c3.color_picker("Text Color", "#000000")
+        
+        if c4.button("✨ Apply Transformation"):
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
             
@@ -63,10 +72,16 @@ if uploaded_file:
                     page.add_redact_annot(rect, fill=(1, 1, 1))
                     page.apply_redactions()
                     
-                    # Step 2: Overlay New Layer
+                    # Step 2: Overlay New Layer with Selected Font
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
                     rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
-                    page.insert_text(fitz.Point(rect.x0, rect.y1 - 1), replace_txt, fontsize=fs, color=rgb)
+                    
+                    # Inserting text with specific font and point size
+                    page.insert_text(fitz.Point(rect.x0, rect.y1 - 1), 
+                                     replace_txt, 
+                                     fontsize=fs, 
+                                     fontname=font_style, 
+                                     color=rgb)
             
             if found:
                 out = io.BytesIO()
@@ -74,7 +89,7 @@ if uploaded_file:
                 st.success("Edit Complete! Check below to open.")
                 open_pdf_in_new_tab(out.getvalue())
             else:
-                st.error("Text nahi mila!")
+                st.error("Bhai, text nahi mila! Spelling check karein.")
 
     st.divider()
 
@@ -82,7 +97,6 @@ if uploaded_file:
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
-    # PDF.js Viewer
     pdf_viewer_html = f"""
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
         <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
@@ -104,7 +118,7 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # Font Analyzer Logic with Table Fix
+    # Font Analyzer Table (Same as your logic but rounded)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     st.subheader("🔍 Font & Color Analysis")
     for page_num, page in enumerate(doc, start=1):
@@ -122,13 +136,6 @@ if uploaded_file:
                             "Color": "#{:02x}{:02x}{:02x}".format((s["color"] >> 16) & 255, (s["color"] >> 8) & 255, s["color"] & 255)
                         })
         
-        # DataFrame display with Column Configuration to prevent text overflow
         df = pd.DataFrame(rows)
-        st.dataframe(
-            df, 
-            use_container_width=True,
-            column_config={
-                "Text": st.column_config.TextColumn("Text", width="large"),
-                "Font": st.column_config.TextColumn("Font", width="medium"),
-            }
-        )
+        st.dataframe(df, use_container_width=True, 
+                    column_config={"Text": st.column_config.TextColumn("Text", width="large")})
