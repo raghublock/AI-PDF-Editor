@@ -40,7 +40,7 @@ if uploaded_file:
     
     # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Full Font Library integrated. Decimal font size (0.01) and custom BG support added.")
+    st.info("Tip: Niche table se text copy karke 'Find Text' mein paste karein.")
     
     with st.container():
         col1, col2 = st.columns(2)
@@ -50,7 +50,6 @@ if uploaded_file:
         c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
         
         # COMPLETE BASE-14 FONT LIBRARY
-        # helv=Helvetica, tiro=Times, cour=Courier, symb=Symbol, zadi=ZapfDingbats
         font_library = {
             "Helvetica (Arial Style)": "helv",
             "Times New Roman Style": "tiro",
@@ -77,19 +76,17 @@ if uploaded_file:
             found = False
             
             # ADVANCED FONT MAPPING LOGIC
-            # Mapping Bold/Italic to internal PyMuPDF font names
             style_map = {
-                "helv": ["helv", "hebo", "helt", "hebi"], # Normal, Bold, Italic, BoldItalic
+                "helv": ["helv", "hebo", "helt", "hebi"],
                 "tiro": ["tiro", "tibo", "tiit", "tibi"], 
                 "cour": ["cour", "cobo", "coit", "cobi"]
             }
             
             if font_style in style_map:
-                # Binary index: 0=None, 1=Bold, 2=Italic, 3=Both
                 idx = (1 if is_bold else 0) + (2 if is_italic else 0)
                 final_font_name = style_map[font_style][idx]
             else:
-                final_font_name = font_style # For symb or zadi
+                final_font_name = font_style
 
             for page in doc_edit:
                 areas = page.search_for(find_txt)
@@ -100,7 +97,7 @@ if uploaded_file:
                     page.add_redact_annot(rect, fill=bg_rgb)
                     page.apply_redactions()
                     
-                    # Step 2: Overlay with float size and chosen color
+                    # Step 2: Overlay
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
                     text_rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     
@@ -125,7 +122,7 @@ if uploaded_file:
 
     st.divider()
 
-    # (Viewer and Analyzer section same rahega as per your previous code)
+    # ---------------------- VIEWER ----------------------
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
@@ -150,9 +147,10 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # ADVANCED ANALYZER
+    # ---------------------- ADVANCED ANALYZER WITH CLICK-TO-COPY ----------------------
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    st.subheader("🔍 Advanced Document Analysis")
+    st.subheader("🔍 Advanced Document Analysis (Hover over Text to Copy)")
+    
     for page_num, page in enumerate(doc, start=1):
         st.write(f"📄 Page {page_num} Color Palette & Details:")
         all_colors = set()
@@ -166,13 +164,27 @@ if uploaded_file:
                         hex_c = "#{:02x}{:02x}{:02x}".format((c >> 16) & 255, (c >> 8) & 255, c & 255)
                         all_colors.add(hex_c)
                         rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
+        
         for draw in page.get_drawings():
             if "fill" in draw and draw["fill"]:
                 c = draw["fill"]
                 all_colors.add("#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255)))
+        
+        # Color Palette Display
         cp_cols = st.columns(15)
         for i, h_code in enumerate(list(all_colors)):
             with cp_cols[i % 15]:
                 st.markdown(f"<div title='{h_code}' style='width:30px;height:30px;border-radius:5px;background:{h_code};border:1px solid #777'></div>", unsafe_allow_html=True)
                 st.caption(h_code)
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, column_config={"Text": st.column_config.TextColumn("Text", width="large")})
+
+        # UPDATED TABLE WITH COPY FEATURE
+        df = pd.DataFrame(rows)
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            column_config={
+                "Text": st.column_config.TextColumn("Text (Quick Copy)", width="large"),
+                "Color": st.column_config.TextColumn("Color", width="small")
+            },
+            hide_index=True
+        )
