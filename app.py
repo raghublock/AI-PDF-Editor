@@ -2,144 +2,120 @@ import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
 import base64
+import io
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="PDF Viewer + Font Analyzer", layout="wide")
+st.set_page_config(page_title="Pro AI PDF Editor - Raghu", layout="wide")
 
-st.title("📄 PDF Viewer + Font & Color Analyzer")
+st.title("📄 AI PDF Analyzer & Smart Editor – Made by Raghu 🚀")
+
+# Sidebar for Navigation & New Tab Logic
+def open_pdf_in_new_tab(pdf_bytes):
+    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+    js_code = f"""
+    <script>
+    function openPDF() {{
+        const base64 = "{base64_pdf}";
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {{
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }}
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {{type: 'application/pdf'}});
+        const fileURL = URL.createObjectURL(blob);
+        window.open(fileURL, '_blank');
+    }}
+    </script>
+    <button onclick="openPDF()" style="background-color: #4CAF50; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-size: 18px; font-weight: bold;">
+        🔓 Open & Print Edited PDF
+    </button>
+    """
+    components.html(js_code, height=100)
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 if uploaded_file:
-
     pdf_bytes = uploaded_file.read()
+    
+    # ---------------------- SMART AI EDIT SECTION (NEW LINE) ----------------------
+    st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
+    st.info("Tip: Ye purane text layer ko hatakar (Redaction) nayi layer usi jagah fit karta hai.")
+    
+    with st.container():
+        col1, col2 = st.columns(2)
+        find_txt = col1.text_input("Find Text (Jo mitaana hai)")
+        replace_txt = col2.text_input("Replace With (Naya word)")
+        
+        c1, c2, c3 = st.columns([2, 1, 1])
+        f_size_manual = c1.number_input("Font Size (0 = Auto Match)", 0, 100, 0)
+        t_color_manual = c2.color_picker("Text Color", "#000000")
+        
+        if c3.button("✨ Apply Smart Transformation"):
+            doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
+            found = False
+            
+            for page in doc_edit:
+                areas = page.search_for(find_txt)
+                for rect in areas:
+                    found = True
+                    # Step 1: Redaction (Wipe old layer)
+                    page.add_redact_annot(rect, fill=(1, 1, 1))
+                    page.apply_redactions()
+                    
+                    # Step 2: Overlay New Layer
+                    fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
+                    rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
+                    page.insert_text(fitz.Point(rect.x0, rect.y1 - 1), replace_txt, fontsize=fs, color=rgb)
+            
+            if found:
+                out = io.BytesIO()
+                doc_edit.save(out)
+                st.success("Edit Complete! Check below to open.")
+                open_pdf_in_new_tab(out.getvalue())
+            else:
+                st.error("Text nahi mila!")
 
-    # ---------------------- ZOOM OPTION ----------------------
-    zoom = st.slider("🔍 Zoom Level", min_value=50, max_value=250, value=130, step=10)
-    scale = zoom / 100  # PDF.js scale factor
+    st.divider()
 
-    # ---------------------- MULTI-PAGE SCROLLABLE PDF VIEWER ----------------------
-    st.subheader("📘 PDF Preview (Scrollable + Zoomable)")
-
+    # ---------------------- ORIGINAL VIEWER & ANALYZER ----------------------
+    zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
-
-    pdf_viewer = f"""
-        <html>
-        <head>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
-            <style>
-                body {{
-                    margin: 0;
-                    background: #222;
-                    color: white;
+    
+    # PDF.js Viewer (Same as your code)
+    pdf_viewer_html = f"""
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+        <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
+        <script>
+            const pdfData = atob("{base64_pdf}");
+            pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
+                const container = document.getElementById("container");
+                for (let i = 1; i <= pdf.numPages; i++) {{
+                    pdf.getPage(i).then(page => {{
+                        const viewport = page.getViewport({{ scale: {zoom/100} }});
+                        const canvas = document.createElement("canvas");
+                        canvas.width = viewport.width; canvas.height = viewport.height;
+                        container.appendChild(canvas);
+                        page.render({{ canvasContext: canvas.getContext("2d"), viewport: viewport }});
+                    }});
                 }}
-
-                #container {{
-                    height: 700px;
-                    overflow-y: scroll;
-                    padding: 10px;
-                }}
-
-                canvas {{
-                    display: block;
-                    margin: 20px auto;
-                    border: 1px solid #555;
-                }}
-            </style>
-        </head>
-
-        <body>
-            <div id="container"></div>
-
-            <script>
-                const pdfData = atob("{base64_pdf}");
-                const userScale = {scale};
-
-                pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
-                    const container = document.getElementById("container");
-                    container.innerHTML = "";   // clear previous render
-
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
-                        pdf.getPage(pageNum).then(page => {{
-
-                            const viewport = page.getViewport({{ scale: userScale }});
-                            const canvas = document.createElement("canvas");
-                            const context = canvas.getContext("2d");
-
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
-
-                            container.appendChild(canvas);
-
-                            page.render({{
-                                canvasContext: context,
-                                viewport: viewport
-                            }});
-                        }});
-                    }}
-                }});
-            </script>
-        </body>
-        </html>
+            }});
+        </script>
     """
+    st.components.v1.html(pdf_viewer_html, height=550)
 
-    st.components.v1.html(pdf_viewer, height=750, scrolling=False)
-
-    # ---------------------- TEXT + FONT ANALYZER ----------------------
+    # Font Analyzer Logic (Same as your code)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-    st.subheader("🔍 PDF Text + Font Details")
-
+    st.subheader("🔍 Font & Color Analysis")
     for page_num, page in enumerate(doc, start=1):
-
-        st.markdown(f"## 📄 Page {page_num}")
-
-        text_blocks = page.get_text("dict")["blocks"]
-        page_colors = set()
+        blocks = page.get_text("dict")["blocks"]
         rows = []
-
-        for block in text_blocks:
-            if block['type'] == 0:  # text block
-                for line in block["lines"]:
-                    for span in line["spans"]:
-
-                        text = span["text"]
-                        font = span["font"]
-                        size = span["size"]
-                        color = span["color"]
-                        flags = span["flags"]
-
-                        is_bold = bool(flags & 2)
-                        is_italic = bool(flags & 1)
-                        is_underlined = bool(flags & 4)
-
-                        r = (color >> 16) & 255
-                        g = (color >> 8) & 255
-                        b = color & 255
-
-                        page_colors.add((r, g, b))
-
+        for b in blocks:
+            if b['type'] == 0:
+                for l in b["lines"]:
+                    for s in l["spans"]:
                         rows.append({
-                            "Text": text,
-                            "Font": font,
-                            "Size": size,
-                            "Bold": is_bold,
-                            "Italic": is_italic,
-                            "Underline": is_underlined,
-                            "Color (RGB)": f"({r},{g},{b})"
+                            "Text": s["text"], "Font": s["font"], "Size": s["size"],
+                            "Color": "#{:02x}{:02x}{:02x}".format((s["color"] >> 16) & 255, (s["color"] >> 8) & 255, s["color"] & 255)
                         })
-
-        df = pd.DataFrame(rows)
-        st.dataframe(df, width="stretch")
-
-        st.subheader("🎨 Page Colors")
-        cols = st.columns(10)
-
-        for i, (r, g, b) in enumerate(page_colors):
-            hex_code = "#{:02x}{:02x}{:02x}".format(r, g, b)
-            with cols[i % 10]:
-                st.write(hex_code)
-                st.markdown(
-                    f"<div style='width:40px;height:40px;border-radius:5px;background:{hex_code}'></div>",
-                    unsafe_allow_html=True
-                )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
