@@ -40,79 +40,83 @@ if uploaded_file:
     
     # ---------------------- SMART AI EDIT SECTION ----------------------
     st.markdown("### 📝 Smart AI Edit (Layer Pattern)")
-    st.info("Tip: Niche palette se background color code dekhein aur table se font details.")
+    st.info("Tip: Niche palette se color code dekhein. Italic error fix kar diya gaya hai.")
     
     with st.container():
         col1, col2 = st.columns(2)
         find_txt = col1.text_input("Find Text (Jo mitaana hai)")
         replace_txt = col2.text_input("Replace With (Naya word)")
         
+        # Extended Font Library & Decimal Support
         c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
-        
-        # Extended Fonts
-        all_fonts = ["helv", "cour", "tiro", "symb", "zadi", "heit", "hebo"]
-        font_style = c1.selectbox("Font Theme", all_fonts, help="helv=Arial, tiro=Times New Roman, cour=Courier")
-        f_size_manual = c2.number_input("Font Size", value=0.0, step=0.1, format="%.1f")
+        all_fonts = ["helv", "cour", "tiro", "symb", "zadi", "heit", "hebo", "hebi", "hali", "haco"]
+        font_style = c1.selectbox("Font Theme", all_fonts)
+        f_size_manual = c2.number_input("Font Size", value=0.00, step=0.01, format="%.2f") # 2 Decimal support
         t_color_manual = c3.color_picker("Text Color", "#000000")
-        
-        # MS Word Style Toggles
+        bg_color_manual = c4.color_picker("Background Patch Color", "#FFFFFF") # New BG color option
+
         s1, s2, s3, s4 = st.columns([1, 1, 1, 3])
         is_bold = s1.checkbox("Bold")
         is_italic = s2.checkbox("Italic")
         is_underline = s3.checkbox("Underline")
 
-        if c4.button("✨ Apply Smart Transformation"):
+        if st.button("✨ Apply Smart Transformation"):
             doc_edit = fitz.open(stream=pdf_bytes, filetype="pdf")
             found = False
             
-            # Logic for Dynamic Font Name
-            suffix = ""
-            if is_bold and is_italic: suffix = "-BoldItalic"
-            elif is_bold: suffix = "-Bold"
-            elif is_italic: suffix = "-Italic"
+            # Logic for Dynamic Font Name (Error Fix for Italic/Bold)
+            # PyMuPDF uses specific internal names for styles
+            font_map = {
+                "helv": ["helv", "hebo", "helt", "hebi"], # Helvetica variants
+                "tiro": ["tiro", "tibo", "tiit", "tibi"], # Times variants
+                "cour": ["cour", "cobo", "coit", "cobi"]  # Courier variants
+            }
             
-            font_map = {"helv": "helvetica", "cour": "courier", "tiro": "times-roman"}
-            base_f = font_map.get(font_style, font_style)
-            final_font_name = f"{base_f}{suffix}"
+            # Select proper font name based on toggles
+            if font_style in font_map:
+                idx = (1 if is_bold else 0) + (2 if is_italic else 0)
+                final_font_name = font_map[font_style][idx]
+            else:
+                final_font_name = font_style # Fallback for others
 
             for page in doc_edit:
                 areas = page.search_for(find_txt)
                 for rect in areas:
                     found = True
-                    # Step 1: Redaction
-                    page.add_redact_annot(rect, fill=(1, 1, 1))
+                    # Step 1: Redaction with Custom Background Color
+                    bg_rgb = tuple(int(bg_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
+                    page.add_redact_annot(rect, fill=bg_rgb)
                     page.apply_redactions()
                     
-                    # Step 2: Overlay
+                    # Step 2: Overlay New Text
                     fs = f_size_manual if f_size_manual > 0 else (rect.y1 - rect.y0) - 1
-                    rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
+                    text_rgb = tuple(int(t_color_manual.lstrip('#')[i:i+2], 16)/255 for i in (0, 2, 4))
                     
                     page.insert_text(
                         fitz.Point(rect.x0, rect.y1 - 1), 
                         replace_txt, 
                         fontsize=fs, 
                         fontname=final_font_name, 
-                        color=rgb
+                        color=text_rgb
                     )
                     
                     if is_underline:
-                        page.draw_line(fitz.Point(rect.x0, rect.y1), fitz.Point(rect.x1, rect.y1), color=rgb, width=1)
+                        page.draw_line(fitz.Point(rect.x0, rect.y1), fitz.Point(rect.x1, rect.y1), color=text_rgb, width=1)
             
             if found:
                 out = io.BytesIO()
                 doc_edit.save(out)
-                st.success("Edit Complete! Check below to open.")
+                st.success("Edit Complete! Naya tab open karein.")
                 open_pdf_in_new_tab(out.getvalue())
             else:
-                st.error("Bhai, text nahi mila!")
+                st.error("Text nahi mila!")
 
     st.divider()
 
-    # ---------------------- VIEWER & ADVANCED ANALYZER ----------------------
+    # ---------------------- VIEWER & ANALYZER ----------------------
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
-    # PDF.js Viewer Logic
     pdf_viewer_html = f"""
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
         <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
@@ -134,16 +138,15 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # ADVANCED ANALYZER (Text + Background Colors)
+    # ADVANCED ANALYZER
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     st.subheader("🔍 Advanced Document Analysis")
     
     for page_num, page in enumerate(doc, start=1):
-        st.write(f"📄 Page {page_num} Color Palette & Details:")
+        st.write(f"📄 Page {page_num} Details:")
         all_colors = set()
         rows = []
         
-        # Text Info
         blocks = page.get_text("dict")["blocks"]
         for b in blocks:
             if b['type'] == 0:
@@ -154,13 +157,11 @@ if uploaded_file:
                         all_colors.add(hex_c)
                         rows.append({"Text": s["text"], "Font": s["font"], "Size": round(s["size"], 2), "Color": hex_c})
 
-        # Background/Shape Colors (Vector Graphics)
         for draw in page.get_drawings():
             if "fill" in draw and draw["fill"]:
                 c = draw["fill"]
                 all_colors.add("#{:02x}{:02x}{:02x}".format(int(c[0]*255), int(c[1]*255), int(c[2]*255)))
 
-        # Display Color Code Boxes
         cp_cols = st.columns(15)
         for i, h_code in enumerate(list(all_colors)):
             with cp_cols[i % 15]:
