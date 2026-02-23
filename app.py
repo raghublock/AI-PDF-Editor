@@ -82,7 +82,7 @@ if uploaded_file:
     zoom = st.slider("🔍 Zoom Level", 50, 250, 130)
     base64_pdf = base64.b64encode(pdf_bytes).decode()
     
-    # PDF.js Viewer (Same as your code)
+    # PDF.js Viewer
     pdf_viewer_html = f"""
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
         <div id="container" style="height:500px; overflow-y:scroll; background:#222; padding:10px;"></div>
@@ -104,10 +104,11 @@ if uploaded_file:
     """
     st.components.v1.html(pdf_viewer_html, height=550)
 
-    # Font Analyzer Logic (Same as your code)
+    # Font Analyzer Logic with Table Fix
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     st.subheader("🔍 Font & Color Analysis")
     for page_num, page in enumerate(doc, start=1):
+        st.write(f"📄 Page {page_num}")
         blocks = page.get_text("dict")["blocks"]
         rows = []
         for b in blocks:
@@ -115,7 +116,19 @@ if uploaded_file:
                 for l in b["lines"]:
                     for s in l["spans"]:
                         rows.append({
-                            "Text": s["text"], "Font": s["font"], "Size": s["size"],
+                            "Text": s["text"], 
+                            "Font": s["font"], 
+                            "Size": round(s["size"], 2),
                             "Color": "#{:02x}{:02x}{:02x}".format((s["color"] >> 16) & 255, (s["color"] >> 8) & 255, s["color"] & 255)
                         })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        
+        # DataFrame display with Column Configuration to prevent text overflow
+        df = pd.DataFrame(rows)
+        st.dataframe(
+            df, 
+            use_container_width=True,
+            column_config={
+                "Text": st.column_config.TextColumn("Text", width="large"),
+                "Font": st.column_config.TextColumn("Font", width="medium"),
+            }
+        )
