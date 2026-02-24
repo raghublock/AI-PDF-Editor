@@ -30,7 +30,26 @@ st.markdown("""
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         font-family: 'Inter', sans-serif;
     }
+     /* Main Container */
+    .main-header {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+    }
     
+    .main-header h1 {
+        color: #667eea;
+        margin: 0;
+        font-size: 2em;
+    }
+    
+    .main-header p {
+        color: #666;
+        margin: 5px 0 0 0;
+    }
     /* Card Styling */
     .main-card { 
         background: white; 
@@ -1856,3 +1875,4 @@ with col3:
 
 # Cleanup old cache
 cleanup_old_cache()
+
