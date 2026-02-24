@@ -10,6 +10,8 @@ from pathlib import Path
 import hashlib
 from typing import Optional, Tuple, List
 import logging
+import json
+import re
 
 # ---------------------------------------------------------
 # PAGE CONFIG
@@ -151,7 +153,7 @@ st.markdown("""
             🔵 Pro PDF Studio — by Raghu
         </h1>
         <p style='color: white; opacity: 0.9; margin: 10px 0 0 0; font-size: 1.1em;'>
-            🚀 Advanced PDF Processing Tool with AI Features
+            🚀 Advanced PDF Processing Tool with AI Features & OCR
         </p>
     </div>
 """, unsafe_allow_html=True)
@@ -166,7 +168,8 @@ def init_session_state():
         'viewer_doc': None,
         'processed_pdfs': {},
         'upload_history': [],
-        'cache_cleanup_time': time.time()
+        'cache_cleanup_time': time.time(),
+        'ocr_available': None
     }
     
     for key, value in defaults.items():
@@ -174,6 +177,65 @@ def init_session_state():
             st.session_state[key] = value
 
 init_session_state()
+
+# ---------------------------------------------------------
+# OCR SETUP
+# ---------------------------------------------------------
+def check_ocr_availability():
+    """Check if OCR libraries are available"""
+    if st.session_state.ocr_available is None:
+        try:
+            import pytesseract
+            from PIL import Image
+            st.session_state.ocr_available = True
+        except ImportError:
+            st.session_state.ocr_available = False
+    return st.session_state.ocr_available
+
+def perform_ocr_on_pdf(doc, language='eng', dpi=300):
+    """
+    Perform OCR on PDF document
+    
+    Args:
+        doc: PyMuPDF document object
+        language: Tesseract language code (eng, spa, fra, etc.)
+        dpi: DPI for image conversion
+        
+    Returns:
+        Dictionary with OCR results per page
+    """
+    try:
+        import pytesseract
+        from PIL import Image
+        
+        ocr_results = {}
+        
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            
+            # Convert page to image
+            pix = page.get_pixmap(dpi=dpi)
+            img_data = pix.tobytes("png")
+            
+            # Convert to PIL Image
+            img = Image.open(io.BytesIO(img_data))
+            
+            # Perform OCR
+            text = pytesseract.image_to_string(img, lang=language)
+            
+            # Get detailed data
+            data = pytesseract.image_to_data(img, lang=language, output_type=pytesseract.Output.DICT)
+            
+            ocr_results[page_num + 1] = {
+                'text': text,
+                'data': data,
+                'word_count': len([w for w in text.split() if w.strip()])
+            }
+            
+        return ocr_results
+        
+    except Exception as e:
+        raise Exception(f"OCR Error: {str(e)}")
 
 # ---------------------------------------------------------
 # ENHANCED UNIVERSAL FUNCTIONS
@@ -318,7 +380,7 @@ def validate_pdf(file) -> Tuple[bool, str]:
 tab_names = [
     "📘 Viewer + Smart Edit", "➕ Merge PDFs", "✂ Split PDF", "🗜 Compress PDF",
     "🖼 Extract Images", "📄 Extract Text", "📊 Extract Tables", 
-    "📑 Reorder Pages", "✍ Add Signature", "💧 Watermark Tools", "🤖 AI Auto Edit"
+    "📑 Reorder Pages", "✍ Add Signature", "💧 Watermark Tools", "🤖 AI Auto Edit", "🔍 OCR Scanner"
 ]
 tabs = st.tabs(tab_names)
 
@@ -980,7 +1042,6 @@ with tabs[5]:
                             
                             # Combine text
                             if format_type == "JSON":
-                                import json
                                 final_text = json.dumps(all_text, indent=2)
                             else:
                                 final_text = "\n\n".join(all_text)
@@ -1102,23 +1163,28 @@ with tabs[6]:
                                     )
                                 
                                 elif output_format == "Excel":
-                                    # Create Excel file with multiple sheets
-                                    output = io.BytesIO()
-                                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                                        for table_info in all_tables:
-                                            sheet_name = f"Page{table_info['page']}_Table{table_info['table']}"
-                                            table_info['data'].to_excel(writer, sheet_name=sheet_name, index=False)
-                                    
-                                    st.download_button(
-                                        label="⬇ Download All Tables (Excel)",
-                                        data=output.getvalue(),
-                                        file_name="tables.xlsx",
-                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                        use_container_width=True
-                                    )
+                                    # Check if openpyxl is available
+                                    try:
+                                        import openpyxl
+                                        # Create Excel file with multiple sheets
+                                        output = io.BytesIO()
+                                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                            for table_info in all_tables:
+                                                sheet_name = f"Page{table_info['page']}_Table{table_info['table']}"
+                                                table_info['data'].to_excel(writer, sheet_name=sheet_name, index=False)
+                                        
+                                        st.download_button(
+                                            label="⬇ Download All Tables (Excel)",
+                                            data=output.getvalue(),
+                                            file_name="tables.xlsx",
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            use_container_width=True
+                                        )
+                                    except ImportError:
+                                        st.error("❌ openpyxl not installed. Run: pip install openpyxl")
+                                        st.info("💡 Use CSV format instead, or install openpyxl")
                                 
                                 else:  # JSON
-                                    import json
                                     json_data = []
                                     for table_info in all_tables:
                                         json_data.append({
@@ -1746,7 +1812,6 @@ with tabs[10]:
                                     
                                     page_info = {"page": page_num + 1}
                                     
-                                    import re
                                     if "Dates" in info_types:
                                         dates = re.findall(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', text)
                                         page_info["dates"] = dates[:5]
@@ -1763,7 +1828,6 @@ with tabs[10]:
                                     progress_bar.progress((page_num + 1) / len(doc))
                                 
                                 # Display extracted info
-                                import json
                                 st.json(extracted_info)
                                 
                                 st.download_button(
@@ -1779,7 +1843,6 @@ with tabs[10]:
                                 for page_num, page in enumerate(doc):
                                     text = page.get_text()
                                     
-                                    import re
                                     patterns_to_redact = []
                                     
                                     if "Email Addresses" in patterns:
@@ -1842,6 +1905,276 @@ with tabs[10]:
         
         st.markdown("</div>", unsafe_allow_html=True)
 
+# =========================================================
+# 🔍 TAB 12 — OCR SCANNER (NEW!)
+# =========================================================
+with tabs[11]:
+    with st.container():
+        st.markdown("<div class='main-card'>", unsafe_allow_html=True)
+        st.subheader("🔍 OCR Scanner")
+        
+        # Check OCR availability
+        ocr_available = check_ocr_availability()
+        
+        if not ocr_available:
+            st.warning("⚠️ OCR libraries not installed")
+            st.info("📦 To enable OCR, install required packages:")
+            st.code("pip install pytesseract pillow")
+            st.markdown("""
+            **Additional Setup:**
+            - **Windows**: Download and install [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki)
+            - **Linux**: `sudo apt-get install tesseract-ocr`
+            - **Mac**: `brew install tesseract`
+            
+            **Language Packs** (optional):
+            - English: Included by default
+            - Spanish: `sudo apt-get install tesseract-ocr-spa`
+            - French: `sudo apt-get install tesseract-ocr-fra`
+            - German: `sudo apt-get install tesseract-ocr-deu`
+            """)
+        else:
+            st.success("✅ OCR is ready to use!")
+        
+        st.info("ℹ️ Extract text from scanned PDF documents using OCR")
+        
+        ocr_pdf = st.file_uploader("Upload Scanned PDF", type=["pdf"], key="tab12_upload")
+        
+        if ocr_pdf:
+            try:
+                doc = fitz.open(stream=ocr_pdf.read(), filetype="pdf")
+                
+                st.success(f"📄 PDF loaded with {len(doc)} pages")
+                
+                # OCR Settings
+                with st.expander("⚙️ OCR Settings", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        ocr_language = st.selectbox(
+                            "Language",
+                            ["eng", "spa", "fra", "deu", "chi_sim", "jpn", "kor"],
+                            format_func=lambda x: {
+                                "eng": "🇬🇧 English",
+                                "spa": "🇪🇸 Spanish",
+                                "fra": "🇫🇷 French",
+                                "deu": "🇩🇪 German",
+                                "chi_sim": "🇨🇳 Chinese Simplified",
+                                "jpn": "🇯🇵 Japanese",
+                                "kor": "🇰🇷 Korean"
+                            }[x]
+                        )
+                    
+                    with col2:
+                        ocr_dpi = st.selectbox(
+                            "Quality (DPI)",
+                            [150, 200, 300, 400],
+                            index=2,
+                            help="Higher DPI = better accuracy but slower"
+                        )
+                    
+                    with col3:
+                        output_format = st.selectbox(
+                            "Output Format",
+                            ["Text", "Searchable PDF", "JSON", "CSV"]
+                        )
+                
+                # Page range selection
+                col1, col2 = st.columns(2)
+                with col1:
+                    ocr_mode = st.radio(
+                        "Pages to Process",
+                        ["All Pages", "Select Range"],
+                        horizontal=True
+                    )
+                
+                if ocr_mode == "Select Range":
+                    with col2:
+                        pass  # Placeholder
+                    
+                    col1, col2 = st.columns(2)
+                    start_page_ocr = col1.number_input("Start Page", min_value=1, max_value=len(doc), value=1, key="ocr_start")
+                    end_page_ocr = col2.number_input("End Page", min_value=start_page_ocr, max_value=len(doc), value=min(start_page_ocr+2, len(doc)), key="ocr_end")
+                    pages_to_ocr = range(start_page_ocr-1, end_page_ocr)
+                else:
+                    pages_to_ocr = range(len(doc))
+                
+                st.info(f"📑 Will process {len(list(pages_to_ocr))} page(s)")
+                
+                # OCR Button
+                if st.button("🔍 Start OCR", use_container_width=True):
+                    if not ocr_available:
+                        st.error("❌ OCR libraries not installed. Please install pytesseract and Pillow.")
+                    else:
+                        with st.spinner(f"🔄 Performing OCR on {len(list(pages_to_ocr))} page(s)... This may take a while."):
+                            try:
+                                import pytesseract
+                                from PIL import Image
+                                
+                                progress_bar = st.progress(0)
+                                all_ocr_results = []
+                                total_words = 0
+                                
+                                for idx, page_num in enumerate(pages_to_ocr):
+                                    page = doc[page_num]
+                                    
+                                    # Convert page to image
+                                    pix = page.get_pixmap(dpi=ocr_dpi)
+                                    img_data = pix.tobytes("png")
+                                    img = Image.open(io.BytesIO(img_data))
+                                    
+                                    # Perform OCR
+                                    text = pytesseract.image_to_string(img, lang=ocr_language)
+                                    word_count = len([w for w in text.split() if w.strip()])
+                                    total_words += word_count
+                                    
+                                    all_ocr_results.append({
+                                        'page': page_num + 1,
+                                        'text': text,
+                                        'word_count': word_count
+                                    })
+                                    
+                                    progress_bar.progress((idx + 1) / len(list(pages_to_ocr)))
+                                
+                                st.success(f"🎉 OCR Complete! Extracted {total_words} words from {len(all_ocr_results)} pages")
+                                
+                                # Display results
+                                if output_format == "Text":
+                                    # Plain text output
+                                    full_text = "\n\n".join([f"--- Page {r['page']} ---\n{r['text']}" for r in all_ocr_results])
+                                    
+                                    st.text_area(
+                                        "Extracted Text", 
+                                        full_text[:5000] + ("..." if len(full_text) > 5000 else ""), 
+                                        height=300
+                                    )
+                                    
+                                    if len(full_text) > 5000:
+                                        st.info(f"ℹ️ Showing first 5000 characters. Total: {len(full_text)} characters")
+                                    
+                                    st.download_button(
+                                        "⬇ Download Text",
+                                        full_text,
+                                        "ocr_text.txt",
+                                        use_container_width=True
+                                    )
+                                
+                                elif output_format == "Searchable PDF":
+                                    # Create searchable PDF (add text layer)
+                                    st.info("🔄 Creating searchable PDF...")
+                                    
+                                    for result in all_ocr_results:
+                                        page = doc[result['page'] - 1]
+                                        
+                                        # Add text layer (simplified)
+                                        page.insert_text(
+                                            fitz.Point(10, 10),
+                                            result['text'],
+                                            fontsize=1,
+                                            color=(1, 1, 1),  # White (invisible)
+                                            overlay=False
+                                        )
+                                    
+                                    out = io.BytesIO()
+                                    doc.save(out)
+                                    
+                                    st.success("✅ Searchable PDF created!")
+                                    
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        open_pdf_in_new_tab(out.getvalue(), "🔓 Open Searchable PDF")
+                                    with col2:
+                                        save_and_offer_download(out.getvalue(), "searchable.pdf")
+                                
+                                elif output_format == "JSON":
+                                    # JSON output
+                                    json_output = json.dumps(all_ocr_results, indent=2)
+                                    
+                                    st.json(all_ocr_results[:2])  # Show first 2 pages
+                                    
+                                    if len(all_ocr_results) > 2:
+                                        st.info(f"ℹ️ Showing first 2 pages. Total: {len(all_ocr_results)} pages")
+                                    
+                                    st.download_button(
+                                        "⬇ Download JSON",
+                                        json_output,
+                                        "ocr_results.json",
+                                        mime="application/json",
+                                        use_container_width=True
+                                    )
+                                
+                                else:  # CSV
+                                    # CSV output
+                                    df = pd.DataFrame(all_ocr_results)
+                                    csv_data = df.to_csv(index=False)
+                                    
+                                    st.dataframe(df, use_container_width=True)
+                                    
+                                    st.download_button(
+                                        "⬇ Download CSV",
+                                        csv_data,
+                                        "ocr_results.csv",
+                                        mime="text/csv",
+                                        use_container_width=True
+                                    )
+                                
+                                # Statistics
+                                with st.expander("📊 OCR Statistics"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Total Pages", len(all_ocr_results))
+                                    with col2:
+                                        st.metric("Total Words", total_words)
+                                    with col3:
+                                        avg_words = total_words / len(all_ocr_results) if all_ocr_results else 0
+                                        st.metric("Avg Words/Page", f"{avg_words:.0f}")
+                                
+                                add_whatsapp_share("Bhai, OCR se text extract kar liya! 🔍")
+                                
+                            except ImportError as ie:
+                                st.error(f"❌ Missing library: {str(ie)}")
+                                st.info("💡 Install required packages: pip install pytesseract pillow")
+                            except Exception as e:
+                                st.error(f"❌ OCR Error: {str(e)}")
+                                st.info("💡 Make sure Tesseract is installed on your system")
+                
+                doc.close()
+                
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+        
+        # OCR Tips
+        with st.expander("💡 OCR Tips & Best Practices"):
+            st.markdown("""
+            **For Best OCR Results:**
+            
+            1. **Image Quality**
+               - Use 300 DPI or higher for scanned documents
+               - Ensure good contrast between text and background
+               - Avoid shadows, glare, or distortions
+            
+            2. **Language Selection**
+               - Choose the correct language for your document
+               - Install additional language packs if needed
+            
+            3. **Processing Speed**
+               - Higher DPI = better accuracy but slower processing
+               - Process fewer pages at a time for large documents
+               - Use 200 DPI for drafts, 300+ for final output
+            
+            4. **Common Issues**
+               - Handwritten text may not be recognized accurately
+               - Mixed languages require multiple OCR passes
+               - Complex layouts may need manual review
+            
+            5. **Output Formats**
+               - **Text**: Simple text extraction
+               - **Searchable PDF**: PDF with hidden text layer
+               - **JSON**: Structured data with metadata
+               - **CSV**: Tabular format for analysis
+            """)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
 # ---------------------------------------------------------
 # FOOTER
 # ---------------------------------------------------------
@@ -1852,8 +2185,7 @@ with col1:
 with col2:
     st.markdown("📧 **Contact:** support@example.com")
 with col3:
-    st.markdown("🔧 **Version:** 2.0 Enhanced")
+    st.markdown("🔧 **Version:** 2.1 Enhanced with OCR")
 
 # Cleanup old cache
 cleanup_old_cache()
-
