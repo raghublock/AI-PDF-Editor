@@ -1,4 +1,4 @@
 tesseract-ocr
 libpoppler-cpp-dev
 poppler-utils
-pytesseract pillow openpyxl
+
