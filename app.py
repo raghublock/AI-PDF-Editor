@@ -398,23 +398,41 @@ st.markdown("""
 /* Checkbox */
 .stCheckbox > label > div:first-child { border-color: rgba(102,126,234,0.5) !important; }
 
-/* Metrics */
+/* Metrics — force bright text */
 [data-testid="metric-container"] {
-    background: rgba(102,126,234,0.12);
-    border: 1px solid rgba(102,126,234,0.25);
-    border-radius: 12px;
-    padding: 12px !important;
+    background: linear-gradient(135deg,rgba(102,126,234,0.18),rgba(118,75,162,0.15)) !important;
+    border: 1px solid rgba(102,126,234,0.4) !important;
+    border-radius: 14px !important;
+    padding: 14px 16px !important;
 }
-[data-testid="metric-container"] label { color: #a0a0cc !important; }
-[data-testid="metric-container"] [data-testid="stMetricValue"] { color: #fff !important; }
+[data-testid="metric-container"] label,
+[data-testid="metric-container"] [data-testid="stMetricLabel"],
+[data-testid="metric-container"] [data-testid="stMetricLabel"] p,
+[data-testid="metric-container"] div[data-testid="stMetricLabel"] span {
+    color: #a0b4ff !important; font-size: 0.82em !important; font-weight: 600 !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"],
+[data-testid="metric-container"] [data-testid="stMetricValue"] div {
+    color: #ffffff !important; font-size: 1.9em !important; font-weight: 800 !important;
+    text-shadow: 0 0 20px rgba(102,126,234,0.6) !important;
+}
+/* All generic text on dark bg */
+h1,h2,h3,h4,h5,h6 { color: #e8e8ff !important; }
+p, .stMarkdown p, label, span { color: #c8c8ee; }
+strong { color: #f0f0ff !important; }
+.stCaption, .stCaption p { color: #8888bb !important; }
+/* Success/error/warning text */
+.stSuccess, .stSuccess p { color: #a7f3d0 !important; }
+.stError, .stError p { color: #fca5a5 !important; }
+.stWarning, .stWarning p { color: #fde68a !important; }
+.stInfo, .stInfo p { color: #bfdbfe !important; }
+/* Expander */
+.streamlit-expanderHeader, .streamlit-expanderHeader p { color: #c0c0ee !important; }
+details summary { color: #c0c0ee !important; }
+/* subheader */
+[data-testid="stHeading"] { color: #e8e8ff !important; }
+[data-testid="stHeading"] h3 { color: #e8e8ff !important; }
 
-/* Subheader */
-h3 { color: #e0e0ff !important; }
-.stMarkdown p { color: #c0c0dd; }
-.stCaption { color: #8888aa !important; }
-
-/* expander */
-.streamlit-expanderHeader { color: #c0c0ee !important; }
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"] {
@@ -894,7 +912,60 @@ tabs=st.tabs(TABS)
 # T0 — VIEWER + FIND & REPLACE
 # ══════════════════════════════════
 with tabs[0]:
-    st.subheader("📘 PDF Viewer + Smart Find & Replace")
+    # Donation banner at TOP of every tab
+    CRYPTO_ADR_V = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
+    st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif;}}
+body{{background:transparent;padding:3px 0;}}
+.don-bar{{
+  background:linear-gradient(135deg,rgba(102,126,234,0.22),rgba(118,75,162,0.22));
+  border:1px solid rgba(102,126,234,0.35);border-radius:14px;
+  padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}}
+.don-text{{color:#c7d2fe;font-size:0.82em;flex:1;min-width:180px;}}
+.don-text strong{{color:#fde68a;}}
+.don-btns{{display:flex;gap:8px;flex-wrap:wrap;}}
+.dbtn{{border:none;border-radius:10px;padding:7px 14px;font-weight:700;
+       font-size:0.78em;cursor:pointer;transition:all 0.15s;
+       -webkit-tap-highlight-color:transparent;}}
+.dbtn-upi{{background:linear-gradient(135deg,#667eea,#764ba2);color:white;
+           box-shadow:0 3px 10px rgba(102,126,234,0.4);}}
+.dbtn-upi:hover{{transform:translateY(-1px);box-shadow:0 6px 16px rgba(102,126,234,0.5);}}
+.dbtn-upi:active{{transform:scale(0.96);}}
+.dbtn-cp{{background:rgba(255,255,255,0.08);color:#a5b4fc;
+          border:1px solid rgba(102,126,234,0.3);}}
+.dbtn-cp:hover{{background:rgba(102,126,234,0.25);color:white;}}
+.toast{{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        background:rgba(0,0,0,0.85);color:#fff;padding:6px 16px;
+        border-radius:20px;font-size:0.78em;opacity:0;
+        transition:opacity 0.2s;pointer-events:none;z-index:9999;}}
+.toast.show{{opacity:1;}}
+</style></head><body>
+<div class="don-bar">
+  <div class="don-text">
+    🙏 <strong>Support Raghu!</strong> &nbsp;Minimum <strong>₹10</strong> via UPI &nbsp;·&nbsp;
+    Crypto accepted (ETH/MATIC/USDT) &nbsp;·&nbsp;
+    <span style="font-family:monospace;color:#a5b4fc;">raghubhati@slc</span>
+  </div>
+  <div class="don-btns">
+    <button class="dbtn dbtn-upi" onclick="cp('{UPI_ID}','UPI ID copy ho gaya ✅')">💛 Copy UPI ID</button>
+    <button class="dbtn dbtn-cp"  onclick="cp('{CRYPTO_ADR_V}','Wallet address copy ho gaya ✅')">🌍 Copy Crypto</button>
+  </div>
+</div>
+<div class="toast" id="t"></div>
+<script>
+function cp(txt,msg){{
+  if(navigator.clipboard){{navigator.clipboard.writeText(txt).then(function(){{st(msg);}});}}
+  else{{var a=document.createElement('textarea');a.value=txt;a.style.cssText='position:fixed;opacity:0;';
+        document.body.appendChild(a);a.focus();a.select();
+        try{{document.execCommand('copy');st(msg);}}catch(e){{}}document.body.removeChild(a);}}
+}}
+function st(msg){{var t=document.getElementById('t');t.textContent=msg;
+  t.classList.add('show');setTimeout(function(){{t.classList.remove('show');}},2000);}}
+</script></body></html>""", height=68)
+
+    st.markdown("### ✏️ PDF Find & Replace Editor")
     up=st.file_uploader("📂 Upload PDF",type=["pdf"],key="v_up")
     if up:
         pb=get_pdf_bytes(up)
@@ -1001,21 +1072,140 @@ with tabs[1]:
                     st.markdown(sw+"</div>",unsafe_allow_html=True)
                 else: st.info("No colors.")
                 if idata["draw_colors"]:
-                    st.markdown("**🖊 Drawing/Shape Colors:**")
-                    st.dataframe(pd.DataFrame(idata["draw_colors"]),
-                                 use_container_width=True,hide_index=True)
+                    import json as _j2
+                    dc_json = _j2.dumps(idata["draw_colors"])
+                    st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif;}}
+body{{background:transparent;padding:4px 0;}}
+.wrap{{border-radius:14px;overflow:hidden;border:1px solid rgba(102,126,234,0.3);
+       box-shadow:0 6px 24px rgba(0,0,0,0.3);}}
+.hdr{{background:linear-gradient(135deg,#4f3b8a,#2d1f5e);padding:10px 16px;
+      display:flex;align-items:center;gap:8px;}}
+.hdr-title{{color:white;font-weight:700;font-size:0.88em;flex:1;}}
+.hdr-count{{background:rgba(255,255,255,0.15);color:#d0c0ff;border-radius:20px;
+            padding:2px 10px;font-size:0.72em;font-weight:600;}}
+table{{width:100%;border-collapse:collapse;}}
+thead tr{{background:rgba(30,20,60,0.98);}}
+th{{padding:9px 14px;text-align:left;font-size:0.72em;font-weight:700;
+    color:#9d8eff;text-transform:uppercase;letter-spacing:0.5px;
+    border-bottom:1px solid rgba(102,126,234,0.25);}}
+tbody tr{{background:rgba(15,10,40,0.85);border-bottom:1px solid rgba(102,126,234,0.08);transition:background 0.1s;}}
+tbody tr:hover{{background:rgba(102,126,234,0.15);}}
+tbody tr:nth-child(even){{background:rgba(30,20,60,0.7);}}
+tbody tr:nth-child(even):hover{{background:rgba(102,126,234,0.17);}}
+td{{padding:9px 14px;font-size:0.82em;vertical-align:middle;}}
+.cpill{{display:inline-flex;align-items:center;gap:6px;border-radius:20px;
+        padding:4px 10px;font-family:monospace;font-size:0.82em;font-weight:700;}}
+.cdot{{width:11px;height:11px;border-radius:50%;border:1.5px solid rgba(255,255,255,0.25);flex-shrink:0;}}
+.type-badge{{background:rgba(102,126,234,0.25);color:#a78bfa;border-radius:8px;
+             padding:2px 8px;font-size:0.75em;font-weight:600;}}
+.w-val{{color:#80deea;font-weight:600;font-family:monospace;}}
+</style></head><body>
+<div class="wrap">
+  <div class="hdr">
+    <span style="font-size:1.1em;">🖊</span>
+    <span class="hdr-title">Drawing / Shape Colors</span>
+    <span class="hdr-count" id="dc-count"></span>
+  </div>
+  <table><thead><tr>
+    <th>Color</th><th>Type</th><th>Width</th>
+  </tr></thead>
+  <tbody id="dc-body"></tbody></table>
+</div>
+<script>
+var ROWS={dc_json};
+document.getElementById('dc-count').textContent=ROWS.length+' entries';
+var html='';
+ROWS.forEach(function(r){{
+  var lum=parseInt(r.Color.slice(1,3),16)*0.299+parseInt(r.Color.slice(3,5),16)*0.587+parseInt(r.Color.slice(5,7),16)*0.114;
+  var tc=lum>128?'#000':'#fff';
+  html+='<tr><td><span class="cpill" style="background:'+r.Color+';color:'+tc+';">'
+    +'<span class="cdot" style="background:'+r.Color+';"></span>'+r.Color+'</span></td>'
+    +'<td><span class="type-badge">'+r.Type+'</span></td>'
+    +'<td><span class="w-val">'+r.Width+'</span></td></tr>';
+}});
+document.getElementById('dc-body').innerHTML=html;
+</script></body></html>""", height=min(80 + len(idata["draw_colors"])*44, 380))
 
                 # Fonts
                 st.markdown("---"); st.markdown("### 🔤 Fonts Used")
                 if idata["fonts"]:
-                    st.dataframe(pd.DataFrame(idata["fonts"]),
-                                 use_container_width=True,hide_index=True,
-                                 column_config={
-                                     "Font Name":st.column_config.TextColumn(width="large"),
-                                     "Used":st.column_config.NumberColumn(width="small"),
-                                     "Sizes":st.column_config.TextColumn(width="medium"),
-                                 })
-                else: st.info("No fonts.")
+                    import json as _j3
+                    fonts_json = _j3.dumps(idata["fonts"])
+                    st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif;}}
+body{{background:transparent;padding:4px 0;}}
+.wrap{{border-radius:14px;overflow:hidden;border:1px solid rgba(102,126,234,0.3);
+       box-shadow:0 6px 24px rgba(0,0,0,0.3);}}
+.hdr{{background:linear-gradient(135deg,#2563eb,#4f46e5,#7c3aed);padding:12px 16px;
+      display:flex;align-items:center;justify-content:space-between;}}
+.hdr-title{{color:white;font-weight:800;font-size:0.9em;}}
+.hdr-right{{display:flex;align-items:center;gap:8px;}}
+.hdr-count{{background:rgba(255,255,255,0.18);color:white;border-radius:20px;
+            padding:2px 10px;font-size:0.72em;font-weight:600;}}
+table{{width:100%;border-collapse:collapse;}}
+thead tr{{background:rgba(20,15,55,0.98);}}
+th{{padding:10px 14px;text-align:left;font-size:0.71em;font-weight:700;
+    color:#818cf8;text-transform:uppercase;letter-spacing:0.6px;
+    border-bottom:1px solid rgba(99,102,241,0.3);white-space:nowrap;}}
+tbody tr{{background:rgba(12,8,40,0.9);border-bottom:1px solid rgba(99,102,241,0.08);
+          transition:background 0.12s;}}
+tbody tr:hover{{background:rgba(79,70,229,0.18);}}
+tbody tr:nth-child(even){{background:rgba(25,18,60,0.75);}}
+tbody tr:nth-child(even):hover{{background:rgba(79,70,229,0.2);}}
+td{{padding:10px 14px;font-size:0.82em;vertical-align:middle;}}
+.fname{{color:#c7d2fe;font-weight:600;font-size:0.85em;}}
+.cnt-bar-wrap{{display:flex;align-items:center;gap:8px;min-width:100px;}}
+.cnt-bar{{height:6px;border-radius:3px;background:linear-gradient(90deg,#667eea,#a78bfa);flex-shrink:0;}}
+.cnt-val{{color:#a5b4fc;font-weight:700;font-family:monospace;font-size:0.82em;min-width:24px;}}
+.sizes{{color:#67e8f9;font-size:0.75em;font-family:monospace;}}
+.badge-y{{background:rgba(34,197,94,0.2);color:#86efac;border:1px solid rgba(34,197,94,0.3);
+          border-radius:6px;padding:1px 8px;font-size:0.72em;font-weight:700;}}
+.badge-n{{background:rgba(255,255,255,0.05);color:#555;border:1px solid rgba(255,255,255,0.08);
+          border-radius:6px;padding:1px 8px;font-size:0.72em;font-weight:700;}}
+.tbl-scroll{{max-height:320px;overflow-y:auto;}}
+.tbl-scroll::-webkit-scrollbar{{width:5px;}}
+.tbl-scroll::-webkit-scrollbar-track{{background:rgba(255,255,255,0.04);}}
+.tbl-scroll::-webkit-scrollbar-thumb{{background:rgba(99,102,241,0.5);border-radius:3px;}}
+</style></head><body>
+<div class="wrap">
+  <div class="hdr">
+    <span style="font-size:1.15em;">🔤</span>&nbsp;
+    <span class="hdr-title">Fonts Used on This Page</span>
+    <div class="hdr-right">
+      <span class="hdr-count" id="f-count"></span>
+    </div>
+  </div>
+  <div class="tbl-scroll">
+  <table><thead><tr>
+    <th>Font Name</th>
+    <th>Uses</th>
+    <th>Sizes (pt)</th>
+    <th>Bold</th>
+    <th>Italic</th>
+  </tr></thead>
+  <tbody id="f-body"></tbody></table>
+  </div>
+</div>
+<script>
+var FONTS={fonts_json};
+var maxCount=Math.max.apply(null,FONTS.map(function(f){{return f.Used;}}));
+document.getElementById('f-count').textContent=FONTS.length+' font'+(FONTS.length!==1?'s':'');
+var html='';
+FONTS.forEach(function(f){{
+  var barW=Math.round((f.Used/maxCount)*80);
+  html+='<tr>'
+    +'<td><span class="fname">'+f["Font Name"]+'</span></td>'
+    +'<td><div class="cnt-bar-wrap"><div class="cnt-bar" style="width:'+barW+'px;"></div><span class="cnt-val">'+f.Used+'</span></div></td>'
+    +'<td><span class="sizes">'+f.Sizes+'</span></td>'
+    +'<td><span class="badge-'+(f.Bold==="✅"?"y":"n")+'">'+(f.Bold==="✅"?"✅ Yes":"— No")+'</span></td>'
+    +'<td><span class="badge-'+(f.Italic==="✅"?"y":"n")+'">'+(f.Italic==="✅"?"✅ Yes":"— No")+'</span></td>'
+    +'</tr>';
+}});
+document.getElementById('f-body').innerHTML=html;
+</script></body></html>""", height=min(90 + len(idata["fonts"])*48, 400))
 
                 # ── Beautiful Interactive Table (replaces cards) ──
                 st.markdown("---")
