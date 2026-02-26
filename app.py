@@ -1,34 +1,21 @@
 """
-Pro PDF Studio — by Raghu (v2.0 - Enhanced)
-============================================
-IMPROVEMENTS:
-- Better code architecture with proper classes
-- Robust error handling everywhere
-- Complete tab implementations
-- Memory-safe PDF processing
-- Better UI/UX with real-time preview
-- Fixed cache anti-patterns
-- Complete find & replace with proper font handling
+Pro PDF Studio — by Raghu (v3.0)
+- Merge/Split/Compress tabs REMOVED
+- Page Inspector: mobile-friendly cards, 50+ fonts, Find & Replace integrated
+- Donation QR (UPI: raghubhati@slc) — popup on every page load + dedicated tab
 """
 
 import streamlit as st
-import fitz  # PyMuPDF
+import fitz
 import pandas as pd
 import io
 import base64
 import zipfile
 import urllib.parse
-import time
-from pathlib import Path
 import hashlib
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict
 import logging
-import json
-import re
 
-# ─────────────────────────────────────────────
-# LOGGING SETUP
-# ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -39,11 +26,7 @@ st.set_page_config(
     page_title="Pro PDF Studio — Raghu",
     layout="wide",
     initial_sidebar_state="collapsed",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': "Pro PDF Studio v2.0 by Raghu"
-    }
+    menu_items={'About': "Pro PDF Studio v3.0 by Raghu"}
 )
 
 # ─────────────────────────────────────────────
@@ -51,1621 +34,1031 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+.stButton>button{
+    border-radius:10px;font-weight:600;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    color:white;border:none;padding:10px 18px;
+    transition:all 0.2s;width:100%;
+}
+.stButton>button:hover{transform:translateY(-1px);
+    box-shadow:0 8px 20px rgba(102,126,234,0.4);border:none;}
 
-    /* Cards */
-    .main-card {
-        background: white;
-        padding: 24px;
-        border-radius: 16px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-        margin-bottom: 20px;
-        border: 1px solid #f0f0f0;
-    }
+.stTabs [data-baseweb="tab-list"]{
+    gap:4px;background:#f0f2f6;padding:6px;
+    border-radius:14px;flex-wrap:wrap;}
+.stTabs [data-baseweb="tab"]{
+    border-radius:8px;padding:7px 12px;
+    font-weight:500;font-size:0.82em;white-space:nowrap;}
+.stTabs [aria-selected="true"]{
+    background:linear-gradient(135deg,#667eea,#764ba2)!important;color:white!important;}
 
-    /* Metric Cards */
-    .metric-card {
-        background: linear-gradient(135deg, #667eea22, #764ba222);
-        border: 1px solid #667eea44;
-        border-radius: 12px;
-        padding: 16px;
-        text-align: center;
-    }
+.stProgress>div>div{background:linear-gradient(135deg,#667eea,#764ba2);}
 
-    /* Buttons */
-    .stButton > button {
-        border-radius: 10px;
-        font-weight: 600;
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        transition: all 0.2s;
-        width: 100%;
-    }
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 20px rgba(102,126,234,0.4);
-        border: none;
-    }
-    .stButton > button:active { transform: scale(0.98); }
+/* Mobile span cards */
+.span-card{background:#fff;border:1px solid #e8e8e8;border-radius:12px;
+    padding:12px 14px;margin-bottom:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.span-card .sc-text{font-size:0.95em;font-weight:600;color:#1a1a2e;
+    margin-bottom:6px;word-break:break-word;}
+.span-card .sc-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:0.75em;}
+.sc-chip{background:#f0f2f6;border-radius:20px;padding:3px 10px;
+    color:#444;font-weight:500;border:1px solid #e0e0e0;}
+.sc-chip.bold{background:#fff3cd;border-color:#ffc107;color:#856404;}
+.sc-chip.italic{background:#d1ecf1;border-color:#0dcaf0;color:#0c5460;}
+.sc-chip.mono{background:#e2e3ff;border-color:#667eea;color:#3730a3;}
 
-    /* Success / danger buttons */
-    .btn-success > button { background: linear-gradient(135deg, #28a745, #20c997) !important; }
-    .btn-danger > button  { background: linear-gradient(135deg, #dc3545, #fd7e14) !important; }
+/* Donation popup */
+.don-overlay{position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.68);z-index:99999;
+    display:flex;align-items:center;justify-content:center;}
+.don-box{background:white;border-radius:20px;padding:28px 22px;
+    max-width:360px;width:92%;text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.don-box h2{color:#667eea;margin:0 0 6px;font-size:1.35em;}
+.don-box p{color:#555;font-size:0.88em;margin:5px 0 14px;}
+.upi-chip{background:#f0f2f6;border-radius:8px;padding:8px 14px;
+    font-family:monospace;font-size:1em;font-weight:700;color:#667eea;
+    display:inline-block;margin:6px 0;border:2px dashed #667eea;}
+.don-close{margin-top:14px;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    color:white;border:none;border-radius:10px;
+    padding:10px 28px;font-weight:600;cursor:pointer;
+    font-size:0.95em;width:100%;}
 
-    /* WhatsApp */
-    .whatsapp-btn {
-        background: linear-gradient(135deg, #25D366, #128C7E);
-        color: white; padding: 12px 24px;
-        text-decoration: none; border-radius: 10px;
-        font-weight: 600; display: inline-block;
-        margin-top: 8px; text-align: center; width: 100%;
-        transition: all 0.2s;
-    }
-    .whatsapp-btn:hover { box-shadow: 0 8px 20px rgba(37,211,102,0.4); color: white; }
+.whatsapp-btn{background:linear-gradient(135deg,#25D366,#128C7E);
+    color:white;padding:11px 20px;text-decoration:none;
+    border-radius:10px;font-weight:600;display:inline-block;
+    text-align:center;width:100%;transition:all 0.2s;}
+.whatsapp-btn:hover{box-shadow:0 8px 20px rgba(37,211,102,0.4);color:white;}
 
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px; background: #f8f9fa;
-        padding: 8px; border-radius: 14px;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px; padding: 8px 14px; font-weight: 500; font-size: 0.85em;
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #667eea, #764ba2) !important;
-        color: white !important;
-    }
+.app-header{text-align:center;padding:22px;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    border-radius:20px;margin-bottom:24px;
+    box-shadow:0 12px 40px rgba(102,126,234,0.35);}
+.app-header h1{color:white;font-size:clamp(1.2em,4vw,2em);margin:0;font-weight:700;}
+.app-header p{color:rgba(255,255,255,0.88);margin:8px 0 0;font-size:0.9em;}
 
-    /* Progress */
-    .stProgress > div > div { background: linear-gradient(135deg, #667eea, #764ba2); }
-
-    /* Scrollable area */
-    .scroll-box {
-        max-height: 500px; overflow-y: auto;
-        border: 1px solid #e0e0e0; border-radius: 10px;
-        padding: 12px; background: #fafafa;
-    }
-
-    /* Header */
-    .app-header {
-        text-align: center; padding: 28px;
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        border-radius: 20px; margin-bottom: 28px;
-        box-shadow: 0 12px 40px rgba(102,126,234,0.35);
-    }
-    .app-header h1 { color: white; font-size: 2.2em; margin: 0; font-weight: 700; }
-    .app-header p  { color: rgba(255,255,255,0.88); margin: 8px 0 0; font-size: 1em; }
-
-    /* Tag badge */
-    .badge {
-        display: inline-block; background: #667eea22;
-        color: #667eea; border-radius: 20px;
-        padding: 2px 10px; font-size: 0.8em; font-weight: 600;
-        border: 1px solid #667eea44;
-    }
+@media(max-width:640px){
+    .stTabs [data-baseweb="tab"]{padding:5px 8px;font-size:0.76em;}
+    .span-card{padding:9px 11px;}
+}
 </style>
 """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# SESSION STATE
+# ─────────────────────────────────────────────
+def init_ss():
+    defs = {
+        'viewer_pdf_bytes': None,
+        'processed_pdfs':   {},
+        'ocr_available':    None,
+        'undo_stack':       [],
+        'donation_shown':   False,
+    }
+    for k, v in defs.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+init_ss()
+
+# ─────────────────────────────────────────────
+# DONATION POPUP  (once per session)
+# ─────────────────────────────────────────────
+UPI_ID   = "raghubhati@slc"
+UPI_LINK = f"upi://pay?pa={UPI_ID}&pn=Raghu&cu=INR"
+
+def make_qr_b64(data_str: str) -> str:
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=2,
+                           error_correction=qrcode.constants.ERROR_CORRECT_M,
+                           box_size=7, border=3)
+        qr.add_data(data_str)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#667eea", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+if not st.session_state.donation_shown:
+    qr_b64 = make_qr_b64(UPI_LINK)
+    enc_upi = urllib.parse.quote(UPI_LINK)
+    if qr_b64:
+        qr_tag = f'<img src="data:image/png;base64,{qr_b64}" width="185" style="border-radius:10px;margin:8px auto;display:block;border:2px solid #667eea44;"/>'
+    else:
+        qr_tag = (f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=185x185'
+                  f'&color=667eea&data={enc_upi}" width="185" '
+                  f'style="border-radius:10px;margin:8px auto;display:block;" '
+                  f'onerror="this.style.display=\'none\'"/>')
+
+    st.markdown(f"""
+    <div class="don-overlay" id="donOverlay">
+      <div class="don-box">
+        <div style="font-size:2.2em;margin-bottom:4px;">🙏</div>
+        <h2>Support Raghu's Work!</h2>
+        <p>Yeh tool free hai — agar helpful laga toh ek chhoti si<br>chai ki kimat donate karo! ☕</p>
+        {qr_tag}
+        <p style="margin:4px 0 2px;font-size:0.8em;color:#888;">Scan karo ya UPI ID pe bhejo:</p>
+        <div class="upi-chip">{UPI_ID}</div><br/>
+        <button class="don-close"
+          onclick="document.getElementById('donOverlay').style.display='none'">
+          ✅ Thanks! Ab App Use Karo
+        </button>
+        <p style="font-size:0.72em;color:#bbb;margin-top:10px;">
+          Donation optional hai — app bilkul free hai 💙
+        </p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.session_state.donation_shown = True
 
 # ─────────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────────
 st.markdown("""
 <div class='app-header'>
-    <h1>🔵 Pro PDF Studio — by Raghu</h1>
-    <p>🚀 Advanced PDF Processing · Smart Editing · OCR · AI Features</p>
+  <h1>🔵 Pro PDF Studio — by Raghu</h1>
+  <p>Advanced PDF Processing · Smart Editing · OCR · Page Inspector</p>
 </div>
 """, unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────
-# SESSION STATE
-# ─────────────────────────────────────────────
-def init_session_state():
-    defaults = {
-        'viewer_pdf_bytes': None,
-        'processed_pdfs': {},          # cache: hash → bytes
-        'upload_history': [],
-        'ocr_available': None,
-        'last_operation': None,
-        'undo_stack': [],              # list of pdf_bytes for undo
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-init_session_state()
-
-
-# ═══════════════════════════════════════════════════════════
-# ✅  UTILITY FUNCTIONS  (properly fixed)
-# ═══════════════════════════════════════════════════════════
-
-def validate_pdf(file_or_bytes, max_mb: int = 50) -> Tuple[bool, str, int]:
-    """
-    Validate a PDF.
-    Returns (is_valid, message, page_count)
-    Accepts a file-like object OR raw bytes.
-    """
-    try:
-        if isinstance(file_or_bytes, (bytes, bytearray)):
-            pdf_bytes = file_or_bytes
-        else:
-            file_or_bytes.seek(0, 2)
-            size = file_or_bytes.tell()
-            file_or_bytes.seek(0)
-            if size > max_mb * 1024 * 1024:
-                return False, f"File too large — limit is {max_mb} MB", 0
-            pdf_bytes = file_or_bytes.read()
-            file_or_bytes.seek(0)
-
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        pages = len(doc)
-        doc.close()
-
-        if pages == 0:
-            return False, "PDF has no pages", 0
-        return True, f"Valid PDF ({pages} pages)", pages
-
-    except Exception as e:
-        return False, f"Invalid or corrupt PDF: {e}", 0
-
-
-def get_pdf_bytes(uploaded_file) -> Optional[bytes]:
-    """Safely read bytes from uploaded file, rewind after."""
-    try:
-        uploaded_file.seek(0)
-        data = uploaded_file.read()
-        uploaded_file.seek(0)
-        return data
-    except Exception as e:
-        logger.error(f"Error reading file: {e}")
-        return None
-
-
-def pdf_hash(pdf_bytes: bytes) -> str:
-    return hashlib.md5(pdf_bytes).hexdigest()[:12]
-
-
-def get_cached_pdf(key: str) -> Optional[bytes]:
-    return st.session_state.processed_pdfs.get(key)
-
-
-def set_cached_pdf(key: str, data: bytes):
-    # Keep cache small — evict oldest if > 10 entries
-    if len(st.session_state.processed_pdfs) >= 10:
-        oldest = next(iter(st.session_state.processed_pdfs))
-        del st.session_state.processed_pdfs[oldest]
-    st.session_state.processed_pdfs[key] = data
-
-
-def push_undo(pdf_bytes: bytes):
-    """Push current state to undo stack (max 5 levels)."""
-    st.session_state.undo_stack.append(pdf_bytes)
-    if len(st.session_state.undo_stack) > 5:
-        st.session_state.undo_stack.pop(0)
-
-
-def pop_undo() -> Optional[bytes]:
-    if st.session_state.undo_stack:
-        return st.session_state.undo_stack.pop()
-    return None
-
-
-# ─────────────────────────────────────────────
-# UI HELPERS
-# ─────────────────────────────────────────────
-
-def download_btn(pdf_bytes: bytes, filename: str = "output.pdf", label: str = None):
-    """Standard download button with size label."""
-    size_mb = len(pdf_bytes) / (1024 * 1024)
-    size_str = f"{size_mb:.2f} MB" if size_mb >= 0.1 else f"{len(pdf_bytes)//1024} KB"
-    label = label or f"⬇ Download  ({size_str})"
-    st.download_button(label=label, data=pdf_bytes,
-                       file_name=filename, mime="application/pdf",
-                       use_container_width=True)
-
-
-def open_in_new_tab(pdf_bytes: bytes, btn_label: str = "🔓 Open PDF in Browser"):
-    """Open PDF in a new browser tab via base64 blob URL."""
-    b64 = base64.b64encode(pdf_bytes).decode()
-    js = f"""
-    <script>
-    (function() {{
-        const b64 = "{b64}";
-        const bin = atob(b64);
-        const buf = new Uint8Array(bin.length);
-        for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
-        const blob = new Blob([buf], {{type:'application/pdf'}});
-        const url  = URL.createObjectURL(blob);
-        window.open(url,'_blank');
-        setTimeout(()=>URL.revokeObjectURL(url), 500);
-    }})();
-    </script>
-    <button onclick="void(0)"
-        style="background:linear-gradient(135deg,#28a745,#20c997);color:white;
-               padding:11px 22px;border:none;border-radius:10px;font-weight:600;
-               cursor:pointer;width:100%;font-size:0.95em;">
-        {btn_label}
-    </button>
-    """
-    st.components.v1.html(js, height=70)
-
-
-def whatsapp_share(msg: str = "Raghu ke Pro PDF Studio se PDF edit ki! 🚀\nTry it: [your-url]"):
-    encoded = urllib.parse.quote(msg)
-    st.markdown(
-        f'<a href="https://wa.me/?text={encoded}" target="_blank" class="whatsapp-btn">'
-        '📲 Share on WhatsApp</a>',
-        unsafe_allow_html=True
-    )
-
-
-def show_pdf_info(doc, pdf_bytes: bytes):
-    """Display PDF metadata in a clean grid."""
-    meta = doc.metadata
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("📄 Pages",  len(doc))
-    col2.metric("👤 Author", (meta.get('author') or 'Unknown')[:18])
-    col3.metric("📦 Size",   f"{len(pdf_bytes)/1024:.1f} KB")
-    col4.metric("🔒 Encrypted", "Yes" if doc.is_encrypted else "No")
-
-
-def hex_to_rgb_float(hex_color: str) -> Tuple[float, float, float]:
-    hex_color = hex_color.lstrip('#')
-    r, g, b = int(hex_color[0:2],16), int(hex_color[2:4],16), int(hex_color[4:6],16)
-    return r/255, g/255, b/255
-
-
-def rgb_float_to_hex(r, g, b) -> str:
-    return "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
-
-
-# ═══════════════════════════════════════════════════════════
-# PDF OPERATION FUNCTIONS
-# ═══════════════════════════════════════════════════════════
-
-# ── FIND & REPLACE (fully fixed) ──────────────────────────
+# ═══════════════════════════════════════════════
+# 50+ FONT MAP
+# ═══════════════════════════════════════════════
 FONT_MAP = {
-    "Helvetica":    {"normal":"helv","bold":"hebo","italic":"heit","bold_italic":"hebi"},
-    "Times":        {"normal":"tiro","bold":"tibo","italic":"tiit","bold_italic":"tibi"},
-    "Courier":      {"normal":"cour","bold":"cobo","italic":"coit","bold_italic":"cobi"},
-    "Symbol":       {"normal":"symb","bold":"symb","italic":"symb","bold_italic":"symb"},
+    # ── Sans-Serif ──────────────────────────────
+    "Helvetica":         {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Arial":             {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Arial Black":       {"n":"hebo","b":"hebo","i":"hebi","bi":"hebi"},
+    "Calibri":           {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Verdana":           {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Tahoma":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Trebuchet MS":      {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Century Gothic":    {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Futura":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Gill Sans":         {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Segoe UI":          {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Myriad Pro":        {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Franklin Gothic":   {"n":"hebo","b":"hebo","i":"hebi","bi":"hebi"},
+    "Impact":            {"n":"hebo","b":"hebo","i":"hebi","bi":"hebi"},
+    "Optima":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Lucida Sans":       {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Raleway":           {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Open Sans":         {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Roboto":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Lato":              {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Nunito":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Poppins":           {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Montserrat":        {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Source Sans Pro":   {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Ubuntu":            {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Exo 2":             {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Karla":             {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "DM Sans":           {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    "Inter":             {"n":"helv","b":"hebo","i":"heit","bi":"hebi"},
+    # ── Serif ────────────────────────────────────
+    "Times New Roman":   {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Times":             {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Georgia":           {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Garamond":          {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Palatino":          {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Book Antiqua":      {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Cambria":           {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Constantia":        {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Caslon":            {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Minion Pro":        {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Baskerville":       {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Didot":             {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Bodoni":            {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Rockwell":          {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Merriweather":      {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Playfair Display":  {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Libre Baskerville": {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Lora":              {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "PT Serif":          {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Source Serif Pro":  {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    "Crimson Text":      {"n":"tiro","b":"tibo","i":"tiit","bi":"tibi"},
+    # ── Monospace ────────────────────────────────
+    "Courier New":       {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Courier":           {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Consolas":          {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Lucida Console":    {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Monaco":            {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Fira Code":         {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Source Code Pro":   {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Inconsolata":       {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "JetBrains Mono":    {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "Roboto Mono":       {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    "IBM Plex Mono":     {"n":"cour","b":"cobo","i":"coit","bi":"cobi"},
+    # ── Special ──────────────────────────────────
+    "Symbol":            {"n":"symb","b":"symb","i":"symb","bi":"symb"},
+    "ZapfDingbats":      {"n":"zadi","b":"zadi","i":"zadi","bi":"zadi"},
 }
+FONT_NAMES = list(FONT_MAP.keys())  # 62 fonts
 
-def get_font_name(family: str, bold: bool, italic: bool) -> str:
-    entry = FONT_MAP.get(family, FONT_MAP["Helvetica"])
-    if bold and italic: return entry["bold_italic"]
-    if bold:            return entry["bold"]
-    if italic:          return entry["italic"]
-    return entry["normal"]
+def get_font_name(family:str, bold:bool, italic:bool)->str:
+    e = FONT_MAP.get(family, FONT_MAP["Helvetica"])
+    if bold and italic: return e["bi"]
+    if bold:            return e["b"]
+    if italic:          return e["i"]
+    return e["n"]
 
-
-def smart_find_replace(
-    pdf_bytes: bytes,
-    find: str,
-    replace: str,
-    font_family: str = "Helvetica",
-    font_size: float = 12.0,
-    text_color: str = "#000000",
-    bg_color: str = "#FFFFFF",
-    bold: bool = False,
-    italic: bool = False,
-    case_sensitive: bool = True,
-) -> Tuple[bytes, int]:
-    """
-    Find & replace text in PDF.
-    Returns (new_pdf_bytes, total_replacements_count).
-    """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    font_name   = get_font_name(font_family, bold, italic)
-    text_rgb    = hex_to_rgb_float(text_color)
-    bg_rgb      = hex_to_rgb_float(bg_color)
-    total_found = 0
-    flags = 0 if case_sensitive else fitz.TEXT_DEHYPHENATE  # use case-insensitive search
-
-    for page in doc:
-        # search_for returns list of Rect
-        hits = page.search_for(find, flags=flags if case_sensitive else fitz.TEXTFLAGS_SEARCH)
-        if not hits:
-            continue
-        total_found += len(hits)
-
-        # First pass — redact original text
-        for rect in hits:
-            ann = page.add_redact_annot(rect, fill=bg_rgb)
-        page.apply_redactions()
-
-        # Second pass — write replacement text in each rect
-        # Reload rects by searching again is not reliable after redaction,
-        # so we use the saved rects
-        for rect in hits:
-            # Slightly expand rect to give writing room
-            write_rect = fitz.Rect(
-                rect.x0, rect.y0 - 2,
-                rect.x0 + len(replace) * font_size * 0.6,
-                rect.y1 + 2
-            )
-            page.insert_textbox(
-                write_rect,
-                replace,
-                fontname=font_name,
-                fontsize=font_size,
-                color=text_rgb,
-                fill=bg_rgb,
-                align=fitz.TEXT_ALIGN_LEFT,
-            )
-
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True)
-    doc.close()
-    return out.getvalue(), total_found
-
-
-# ── MERGE ─────────────────────────────────────────────────
-def merge_pdfs(pdf_bytes_list: List[bytes]) -> bytes:
-    merged = fitz.open()
-    for pdf_bytes in pdf_bytes_list:
-        src = fitz.open(stream=pdf_bytes, filetype="pdf")
-        merged.insert_pdf(src)
-        src.close()
-    out = io.BytesIO()
-    merged.save(out, garbage=4, deflate=True)
-    merged.close()
-    return out.getvalue()
-
-
-# ── SPLIT ─────────────────────────────────────────────────
-def split_pdf_by_range(pdf_bytes: bytes, ranges: str) -> Dict[str, bytes]:
-    """
-    ranges: e.g.  "1-3, 5, 7-9"
-    Returns dict {label: pdf_bytes}
-    """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    total = len(doc)
-    result = {}
-
-    for part in ranges.split(','):
-        part = part.strip()
-        if not part:
-            continue
-        if '-' in part:
-            start, end = part.split('-', 1)
-            start, end = int(start.strip())-1, int(end.strip())-1
+# ═══════════════════════════════════════════════
+# UTILITIES
+# ═══════════════════════════════════════════════
+def validate_pdf(f_or_b, max_mb=50)->Tuple[bool,str,int]:
+    try:
+        if isinstance(f_or_b,(bytes,bytearray)):
+            pb=f_or_b
         else:
-            start = end = int(part)-1
+            f_or_b.seek(0,2); sz=f_or_b.tell(); f_or_b.seek(0)
+            if sz>max_mb*1024*1024: return False,f"Too large (max {max_mb}MB)",0
+            pb=f_or_b.read(); f_or_b.seek(0)
+        doc=fitz.open(stream=pb,filetype="pdf"); pg=len(doc); doc.close()
+        if pg==0: return False,"No pages",0
+        return True,f"Valid PDF ({pg} pages)",pg
+    except Exception as e:
+        return False,f"Invalid PDF: {e}",0
 
-        start = max(0, min(start, total-1))
-        end   = max(0, min(end,   total-1))
+def get_pdf_bytes(f)->Optional[bytes]:
+    try: f.seek(0); d=f.read(); f.seek(0); return d
+    except: return None
 
-        new_doc = fitz.open()
-        new_doc.insert_pdf(doc, from_page=start, to_page=end)
-        out = io.BytesIO()
-        new_doc.save(out, garbage=4, deflate=True)
-        new_doc.close()
-        result[f"pages_{start+1}_to_{end+1}.pdf"] = out.getvalue()
+def hex_to_rgb(h:str)->Tuple[float,float,float]:
+    h=h.lstrip('#'); return int(h[:2],16)/255,int(h[2:4],16)/255,int(h[4:6],16)/255
 
-    doc.close()
-    return result
+def push_undo(pb:bytes):
+    st.session_state.undo_stack.append(pb)
+    if len(st.session_state.undo_stack)>5: st.session_state.undo_stack.pop(0)
 
+def pop_undo()->Optional[bytes]:
+    return st.session_state.undo_stack.pop() if st.session_state.undo_stack else None
 
-def split_pdf_every_n(pdf_bytes: bytes, n: int) -> Dict[str, bytes]:
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    total = len(doc)
-    result = {}
-    for i in range(0, total, n):
-        end = min(i+n-1, total-1)
-        new_doc = fitz.open()
-        new_doc.insert_pdf(doc, from_page=i, to_page=end)
-        out = io.BytesIO()
-        new_doc.save(out, garbage=4, deflate=True)
-        new_doc.close()
-        result[f"pages_{i+1}_to_{end+1}.pdf"] = out.getvalue()
-    doc.close()
-    return result
+def download_btn(pb:bytes, fn:str="output.pdf", lbl:str=None):
+    sz=len(pb); lbl=lbl or f"⬇ Download ({sz/1024:.1f} KB)"
+    st.download_button(lbl,pb,fn,"application/pdf",use_container_width=True)
 
+def open_in_new_tab(pb:bytes, lbl:str="🔓 Open in Browser"):
+    b64=base64.b64encode(pb).decode()
+    st.components.v1.html(f"""
+    <script>(function(){{
+        const b=atob("{b64}"),a=new Uint8Array(b.length);
+        for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);
+        const u=URL.createObjectURL(new Blob([a],{{type:'application/pdf'}}));
+        window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),500);
+    }})();</script>
+    <button onclick="void(0)" style="background:linear-gradient(135deg,#28a745,#20c997);
+        color:white;padding:11px;border:none;border-radius:10px;font-weight:600;
+        cursor:pointer;width:100%;font-size:0.93em;">{lbl}</button>""",height=68)
 
-# ── COMPRESS ──────────────────────────────────────────────
-def compress_pdf(pdf_bytes: bytes, image_quality: int = 60) -> bytes:
-    """
-    Compress PDF by re-saving with garbage collection + deflate.
-    Optionally downsamples images.
-    """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+def whatsapp_share(msg="Raghu ke Pro PDF Studio se PDF edit ki! 🚀"):
+    enc=urllib.parse.quote(msg)
+    st.markdown(f'<a href="https://wa.me/?text={enc}" target="_blank" class="whatsapp-btn">📲 Share on WhatsApp</a>',
+                unsafe_allow_html=True)
 
-    # Re-compress images on every page
-    for page in doc:
-        img_list = page.get_images(full=True)
-        for img_info in img_list:
-            xref = img_info[0]
-            try:
-                base_img = doc.extract_image(xref)
-                img_bytes = base_img["image"]
-                from PIL import Image
-                img = Image.open(io.BytesIO(img_bytes))
-                # Convert to RGB if needed
-                if img.mode in ('RGBA', 'P'):
-                    img = img.convert('RGB')
-                buf = io.BytesIO()
-                img.save(buf, format='JPEG', quality=image_quality, optimize=True)
-                doc.update_stream(xref, buf.getvalue())
-            except Exception:
-                pass  # skip images that can't be processed
-
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True, clean=True)
-    doc.close()
-    return out.getvalue()
-
-
-# ── EXTRACT IMAGES ────────────────────────────────────────
-def extract_images_from_pdf(pdf_bytes: bytes) -> List[Dict]:
-    """Returns list of {page, index, ext, data(bytes)}"""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    images = []
-    for page_num, page in enumerate(doc):
-        for img_idx, img_info in enumerate(page.get_images(full=True)):
-            xref = img_info[0]
-            try:
-                base_img = doc.extract_image(xref)
-                images.append({
-                    "page":  page_num + 1,
-                    "index": img_idx + 1,
-                    "ext":   base_img["ext"],
-                    "data":  base_img["image"],
-                    "width": base_img.get("width", 0),
-                    "height":base_img.get("height", 0),
-                })
-            except Exception:
-                pass
-    doc.close()
-    return images
-
-
-# ── EXTRACT TEXT ──────────────────────────────────────────
-def extract_text_from_pdf(pdf_bytes: bytes, mode: str = "plain") -> Dict[int, str]:
-    """mode: 'plain' | 'blocks' | 'html'"""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    result = {}
-    for page_num, page in enumerate(doc):
-        if mode == "html":
-            result[page_num+1] = page.get_text("html")
-        elif mode == "blocks":
-            blocks = page.get_text("blocks")
-            result[page_num+1] = "\n".join(b[4] for b in blocks)
-        else:
-            result[page_num+1] = page.get_text()
-    doc.close()
-    return result
-
-
-# ── EXTRACT TABLES ────────────────────────────────────────
-def extract_tables_from_pdf(pdf_bytes: bytes) -> Dict[int, List[pd.DataFrame]]:
-    """Extract tables using PyMuPDF's built-in table finder."""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    all_tables = {}
-    for page_num, page in enumerate(doc):
-        try:
-            tabs = page.find_tables()
-            dfs = []
-            for tab in tabs:
-                df = pd.DataFrame(tab.extract())
-                if not df.empty:
-                    df.columns = df.iloc[0]
-                    df = df[1:].reset_index(drop=True)
-                    dfs.append(df)
-            if dfs:
-                all_tables[page_num+1] = dfs
-        except Exception:
-            pass
-    doc.close()
-    return all_tables
-
-
-# ── REORDER PAGES ─────────────────────────────────────────
-def reorder_pdf_pages(pdf_bytes: bytes, new_order: List[int]) -> bytes:
-    """new_order: 1-based page numbers in desired order."""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    new_doc = fitz.open()
-    for page_num in new_order:
-        idx = page_num - 1
-        if 0 <= idx < len(doc):
-            new_doc.insert_pdf(doc, from_page=idx, to_page=idx)
-    out = io.BytesIO()
-    new_doc.save(out, garbage=4, deflate=True)
-    new_doc.close()
-    doc.close()
-    return out.getvalue()
-
-
-# ── ADD WATERMARK ─────────────────────────────────────────
-def add_text_watermark(
-    pdf_bytes: bytes,
-    text: str = "CONFIDENTIAL",
-    opacity: float = 0.15,
-    color: str = "#FF0000",
-    font_size: int = 60,
-    angle: int = 45,
-    pages: str = "all"
-) -> bytes:
-    doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
-    rgb   = hex_to_rgb_float(color)
-    total = len(doc)
-
-    # Determine which pages
-    if pages == "all":
-        page_indices = list(range(total))
-    else:
-        page_indices = [int(p)-1 for p in pages.split(',') if p.strip().isdigit()]
-        page_indices = [p for p in page_indices if 0 <= p < total]
-
-    for idx in page_indices:
-        page = doc[idx]
-        w, h = page.rect.width, page.rect.height
-        page.insert_text(
-            (w * 0.1, h * 0.55),
-            text,
-            fontsize=font_size,
-            color=(*rgb, opacity),
-            rotate=angle,
-            overlay=True,
-        )
-
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True)
-    doc.close()
-    return out.getvalue()
-
-
-def add_image_watermark(pdf_bytes: bytes, img_bytes: bytes, opacity: float = 0.2) -> bytes:
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    for page in doc:
-        rect = page.rect
-        img_rect = fitz.Rect(
-            rect.width * 0.25, rect.height * 0.35,
-            rect.width * 0.75, rect.height * 0.65
-        )
-        page.insert_image(img_rect, stream=img_bytes, overlay=True)
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True)
-    doc.close()
-    return out.getvalue()
-
-
-# ── ADD SIGNATURE ─────────────────────────────────────────
-def add_text_signature(
-    pdf_bytes: bytes,
-    sig_text: str,
-    page_num: int = 1,
-    x: float = 400, y: float = 750,
-    font_size: float = 14,
-    color: str = "#1a237e"
-) -> bytes:
-    doc  = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[min(page_num-1, len(doc)-1)]
-    rgb  = hex_to_rgb_float(color)
-
-    # Draw underline box
-    rect = fitz.Rect(x - 5, y - font_size - 4, x + len(sig_text)*font_size*0.55 + 5, y + 4)
-    page.draw_rect(rect, color=rgb, width=1)
-    page.insert_text((x, y), sig_text, fontname="tiro", fontsize=font_size, color=rgb)
-
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True)
-    doc.close()
-    return out.getvalue()
-
-
-def add_image_signature(pdf_bytes: bytes, sig_img_bytes: bytes, page_num: int = 1,
-                         x: float = 350, y: float = 700, width: float = 150, height: float = 60) -> bytes:
-    doc  = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[min(page_num-1, len(doc)-1)]
-    rect = fitz.Rect(x, y, x+width, y+height)
-    page.insert_image(rect, stream=sig_img_bytes)
-    out = io.BytesIO()
-    doc.save(out, garbage=4, deflate=True)
-    doc.close()
-    return out.getvalue()
-
-
-# ── OCR ───────────────────────────────────────────────────
-def check_ocr() -> bool:
-    if st.session_state.ocr_available is None:
-        try:
-            import pytesseract
-            from PIL import Image
-            st.session_state.ocr_available = True
-        except ImportError:
-            st.session_state.ocr_available = False
-    return st.session_state.ocr_available
-
-
-def perform_ocr(pdf_bytes: bytes, lang: str = "eng", dpi: int = 200) -> Dict[int, Dict]:
-    import pytesseract
-    from PIL import Image
-    doc     = fitz.open(stream=pdf_bytes, filetype="pdf")
-    results = {}
-    for page_num, page in enumerate(doc):
-        pix  = page.get_pixmap(dpi=dpi)
-        img  = Image.open(io.BytesIO(pix.tobytes("png")))
-        text = pytesseract.image_to_string(img, lang=lang)
-        conf_data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
-        results[page_num+1] = {
-            "text":       text,
-            "word_count": len([w for w in text.split() if w.strip()]),
-            "confidence": round(
-                sum(c for c in conf_data['conf'] if isinstance(c, (int, float)) and c > 0)
-                / max(1, sum(1 for c in conf_data['conf'] if isinstance(c, (int, float)) and c > 0)), 1
-            )
-        }
-    doc.close()
-    return results
-
-
-# ── RENDER PAGE PREVIEW ───────────────────────────────────
-def render_page_preview(pdf_bytes: bytes, page_num: int = 0, dpi: int = 120) -> bytes:
-    doc  = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[min(page_num, len(doc)-1)]
-    pix  = page.get_pixmap(dpi=dpi)
-    doc.close()
+def render_preview(pb:bytes, pg:int=0, dpi:int=120)->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    pix=doc[min(pg,len(doc)-1)].get_pixmap(dpi=dpi); doc.close()
     return pix.tobytes("png")
 
+def pdf_info(doc,pb:bytes):
+    m=doc.metadata; c1,c2,c3,c4=st.columns(4)
+    c1.metric("📄 Pages",len(doc))
+    c2.metric("👤 Author",(m.get('author') or 'Unknown')[:16])
+    c3.metric("📦 Size",f"{len(pb)/1024:.1f} KB")
+    c4.metric("🔒 Enc.","Yes" if doc.is_encrypted else "No")
 
-# ── DEEP PAGE INSPECTOR ───────────────────────────────────
-def inspect_page_full(pdf_bytes: bytes, page_num: int = 0) -> Dict:
-    """
-    Full deep inspection of a PDF page:
-    - All text spans with font, size, color, bold/italic flags
-    - All unique colors (text + drawings + fills)
-    - Page background color (if any)
-    - Drawing / shape colors
-    - Image count on page
-    Returns a rich dict with all data.
-    """
-    doc  = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[min(page_num, len(doc)-1)]
+# ═══════════════════════════════════════════════
+# PDF OPERATIONS
+# ═══════════════════════════════════════════════
+def smart_replace(pb,find,repl,font="Helvetica",size=12.0,
+                  tc="#000",bgc="#fff",bold=False,italic=False,
+                  case=True)->Tuple[bytes,int]:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    fn=get_font_name(font,bold,italic)
+    tr=hex_to_rgb(tc); br=hex_to_rgb(bgc); tot=0
+    for page in doc:
+        hits=page.search_for(find)
+        if not hits: continue
+        tot+=len(hits); saved=list(hits)
+        for r in saved: page.add_redact_annot(r,fill=br)
+        page.apply_redactions()
+        for r in saved:
+            wr=fitz.Rect(r.x0,r.y0-2,
+                         r.x0+max(r.width,len(repl)*size*0.55),r.y1+2)
+            page.insert_textbox(wr,repl,fontname=fn,fontsize=size,
+                                color=tr,fill=br,align=fitz.TEXT_ALIGN_LEFT)
+    out=io.BytesIO(); doc.save(out,garbage=4,deflate=True); doc.close()
+    return out.getvalue(),tot
 
-    text_spans   = []   # full per-span data
-    all_colors   = {}   # hex_color -> count
-    fonts_used   = {}   # font_name -> {sizes, count}
+def split_range(pb:bytes,ranges:str)->Dict[str,bytes]:
+    doc=fitz.open(stream=pb,filetype="pdf"); tot=len(doc); res={}
+    for p in ranges.split(','):
+        p=p.strip()
+        if not p: continue
+        if '-' in p: s,e=p.split('-',1); s,e=int(s)-1,int(e)-1
+        else: s=e=int(p)-1
+        s,e=max(0,min(s,tot-1)),max(0,min(e,tot-1))
+        nd=fitz.open(); nd.insert_pdf(doc,from_page=s,to_page=e)
+        buf=io.BytesIO(); nd.save(buf,garbage=4,deflate=True); nd.close()
+        res[f"pages_{s+1}_to_{e+1}.pdf"]=buf.getvalue()
+    doc.close(); return res
 
-    # ── TEXT SPANS ──
-    blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
-    for block in blocks:
-        if block.get("type") != 0:
-            continue
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-                raw_color = span.get("color", 0)
+def merge_pdfs(pbs:List[bytes])->bytes:
+    m=fitz.open()
+    for pb in pbs:
+        s=fitz.open(stream=pb,filetype="pdf"); m.insert_pdf(s); s.close()
+    out=io.BytesIO(); m.save(out,garbage=4,deflate=True); m.close()
+    return out.getvalue()
 
-                # color is packed int  RGB
-                r = (raw_color >> 16) & 0xFF
-                g = (raw_color >> 8)  & 0xFF
-                b =  raw_color        & 0xFF
-                hex_col = "#{:02x}{:02x}{:02x}".format(r, g, b)
+def extract_images(pb:bytes)->List[Dict]:
+    doc=fitz.open(stream=pb,filetype="pdf"); imgs=[]
+    for pn,page in enumerate(doc):
+        for ii,info in enumerate(page.get_images(full=True)):
+            try:
+                bi=doc.extract_image(info[0])
+                imgs.append({"page":pn+1,"index":ii+1,"ext":bi["ext"],
+                             "data":bi["image"],"width":bi.get("width",0),
+                             "height":bi.get("height",0)})
+            except: pass
+    doc.close(); return imgs
 
-                # font flags
-                flags     = span.get("flags", 0)
-                is_bold   = bool(flags & 2**4)   # bit 4
-                is_italic = bool(flags & 2**1)   # bit 1
-                is_mono   = bool(flags & 2**3)   # bit 3
+def extract_text(pb:bytes,mode="plain")->Dict[int,str]:
+    doc=fitz.open(stream=pb,filetype="pdf"); res={}
+    for pn,page in enumerate(doc):
+        if mode=="html": res[pn+1]=page.get_text("html")
+        elif mode=="blocks": res[pn+1]="\n".join(b[4] for b in page.get_text("blocks"))
+        else: res[pn+1]=page.get_text()
+    doc.close(); return res
 
-                font_name = span.get("font", "Unknown")
-                font_size = round(span.get("size", 0), 2)
-                text_val  = span.get("text", "").strip()
+def extract_tables(pb:bytes)->Dict[int,List[pd.DataFrame]]:
+    doc=fitz.open(stream=pb,filetype="pdf"); all_t={}
+    for pn,page in enumerate(doc):
+        try:
+            dfs=[]
+            for tab in page.find_tables():
+                df=pd.DataFrame(tab.extract())
+                if not df.empty:
+                    df.columns=df.iloc[0]; df=df[1:].reset_index(drop=True); dfs.append(df)
+            if dfs: all_t[pn+1]=dfs
+        except: pass
+    doc.close(); return all_t
 
-                if not text_val:
-                    continue
+def reorder_pages(pb:bytes,order:List[int])->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf"); nd=fitz.open()
+    for p in order:
+        idx=p-1
+        if 0<=idx<len(doc): nd.insert_pdf(doc,from_page=idx,to_page=idx)
+    out=io.BytesIO(); nd.save(out,garbage=4,deflate=True)
+    nd.close(); doc.close(); return out.getvalue()
 
-                text_spans.append({
-                    "Text":        text_val[:80] + ("…" if len(text_val) > 80 else ""),
-                    "Font":        font_name,
-                    "Size":        font_size,
-                    "Color":       hex_col,
-                    "Bold":        "✅" if is_bold   else "—",
-                    "Italic":      "✅" if is_italic else "—",
-                    "Monospace":   "✅" if is_mono   else "—",
-                    "_raw_color":  raw_color,
-                    "_r": r, "_g": g, "_b": b,
-                })
+def add_text_sig(pb,txt,pg=1,x=400,y=750,sz=14,col="#1a237e")->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    page=doc[min(pg-1,len(doc)-1)]; rgb=hex_to_rgb(col)
+    rect=fitz.Rect(x-5,y-sz-4,x+len(txt)*sz*0.55+5,y+4)
+    page.draw_rect(rect,color=rgb,width=1)
+    page.insert_text((x,y),txt,fontname="tiro",fontsize=sz,color=rgb)
+    out=io.BytesIO(); doc.save(out,garbage=4,deflate=True); doc.close()
+    return out.getvalue()
 
-                # accumulate color usage count
-                all_colors[hex_col] = all_colors.get(hex_col, 0) + 1
+def add_img_sig(pb,imgb,pg=1,x=350,y=700,w=150,h=60)->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    doc[min(pg-1,len(doc)-1)].insert_image(fitz.Rect(x,y,x+w,y+h),stream=imgb)
+    out=io.BytesIO(); doc.save(out,garbage=4,deflate=True); doc.close()
+    return out.getvalue()
 
-                # accumulate font usage
-                if font_name not in fonts_used:
-                    fonts_used[font_name] = {"sizes": set(), "count": 0,
-                                              "bold": False, "italic": False}
-                fonts_used[font_name]["sizes"].add(font_size)
-                fonts_used[font_name]["count"] += 1
-                if is_bold:   fonts_used[font_name]["bold"]   = True
-                if is_italic: fonts_used[font_name]["italic"] = True
+def add_text_wm(pb,txt="CONFIDENTIAL",op=0.15,col="#FF0000",
+                sz=60,ang=45,pgs="all")->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf"); rgb=hex_to_rgb(col)
+    idxs=list(range(len(doc))) if pgs=="all" else \
+         [int(p)-1 for p in pgs.split(',') if p.strip().isdigit()]
+    for i in idxs:
+        if 0<=i<len(doc):
+            page=doc[i]; w,h=page.rect.width,page.rect.height
+            page.insert_text((w*0.1,h*0.55),txt,fontsize=sz,
+                             color=(*rgb,op),rotate=ang,overlay=True)
+    out=io.BytesIO(); doc.save(out,garbage=4,deflate=True); doc.close()
+    return out.getvalue()
 
-    # ── DRAWING COLORS (shapes, lines, fills) ──
-    drawing_colors = []
+def add_img_wm(pb,imgb,op=0.2)->bytes:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    for page in doc:
+        r=page.rect
+        page.insert_image(fitz.Rect(r.width*0.25,r.height*0.35,
+                                    r.width*0.75,r.height*0.65),
+                          stream=imgb,overlay=True)
+    out=io.BytesIO(); doc.save(out,garbage=4,deflate=True); doc.close()
+    return out.getvalue()
+
+def check_ocr()->bool:
+    if st.session_state.ocr_available is None:
+        try: import pytesseract; from PIL import Image; st.session_state.ocr_available=True
+        except: st.session_state.ocr_available=False
+    return st.session_state.ocr_available
+
+def run_ocr(pb:bytes,lang="eng",dpi=200)->Dict[int,Dict]:
+    import pytesseract; from PIL import Image
+    doc=fitz.open(stream=pb,filetype="pdf"); res={}
+    for pn,page in enumerate(doc):
+        pix=page.get_pixmap(dpi=dpi)
+        img=Image.open(io.BytesIO(pix.tobytes("png")))
+        txt=pytesseract.image_to_string(img,lang=lang)
+        cd=pytesseract.image_to_data(img,lang=lang,output_type=pytesseract.Output.DICT)
+        confs=[c for c in cd['conf'] if isinstance(c,(int,float)) and c>0]
+        res[pn+1]={"text":txt,"word_count":len([w for w in txt.split() if w.strip()]),
+                   "confidence":round(sum(confs)/max(1,len(confs)),1)}
+    doc.close(); return res
+
+def inspect_page(pb:bytes,pg:int=0)->Dict:
+    doc=fitz.open(stream=pb,filetype="pdf")
+    page=doc[min(pg,len(doc)-1)]
+    spans=[]; all_c={}; fonts={}
+
+    for block in page.get_text("dict",flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]:
+        if block.get("type")!=0: continue
+        for line in block.get("lines",[]):
+            for sp in line.get("spans",[]):
+                raw=sp.get("color",0)
+                r,g,b=(raw>>16)&0xFF,(raw>>8)&0xFF,raw&0xFF
+                hx="#{:02x}{:02x}{:02x}".format(r,g,b)
+                flg=sp.get("flags",0)
+                txt=sp.get("text","").strip()
+                if not txt: continue
+                entry={"text":txt,"font":sp.get("font","?"),
+                       "size":round(sp.get("size",0),2),"color":hx,
+                       "bold":bool(flg&(1<<4)),"italic":bool(flg&(1<<1)),
+                       "mono":bool(flg&(1<<3)),"r":r,"g":g,"b":b}
+                spans.append(entry)
+                all_c[hx]=all_c.get(hx,0)+1
+                fn=entry["font"]
+                if fn not in fonts:
+                    fonts[fn]={"sizes":set(),"count":0,"bold":False,"italic":False}
+                fonts[fn]["sizes"].add(entry["size"]); fonts[fn]["count"]+=1
+                if entry["bold"]:   fonts[fn]["bold"]=True
+                if entry["italic"]: fonts[fn]["italic"]=True
+
+    draw_c=[]
     for draw in page.get_drawings():
-        for key in ("color", "fill"):
-            val = draw.get(key)
-            if val and isinstance(val, (list, tuple)) and len(val) >= 3:
-                r2 = int(val[0] * 255)
-                g2 = int(val[1] * 255)
-                b2 = int(val[2] * 255)
-                hx = "#{:02x}{:02x}{:02x}".format(r2, g2, b2)
-                drawing_colors.append({"Color": hx, "Type": key,
-                                        "Width": round(draw.get("width") or 0, 2)})
-                all_colors[hx] = all_colors.get(hx, 0) + 1
+        for key in("color","fill"):
+            val=draw.get(key)
+            if val and isinstance(val,(list,tuple)) and len(val)>=3:
+                r2,g2,b2=int(val[0]*255),int(val[1]*255),int(val[2]*255)
+                hx="#{:02x}{:02x}{:02x}".format(r2,g2,b2)
+                draw_c.append({"Color":hx,"Type":key,
+                               "Width":round(draw.get("width") or 0,2)})
+                all_c[hx]=all_c.get(hx,0)+1
 
-    # ── IMAGES COUNT ──
-    image_count = len(page.get_images(full=True))
+    pi={"width":round(page.rect.width,1),"height":round(page.rect.height,1),
+        "rotation":page.rotation}
+    img_n=len(page.get_images(full=True)); doc.close()
 
-    # ── PAGE SIZE ──
-    rect = page.rect
-    page_info = {
-        "width":  round(rect.width, 1),
-        "height": round(rect.height, 1),
-        "rotation": page.rotation,
-    }
+    fs=[{"Font Name":fn,"Used":fd["count"],
+         "Sizes":  ", ".join(str(s) for s in sorted(fd["sizes"])),
+         "Bold":   "✅" if fd["bold"] else "—",
+         "Italic": "✅" if fd["italic"] else "—"}
+        for fn,fd in sorted(fonts.items(),key=lambda x:-x[1]["count"])]
 
-    doc.close()
+    return {"spans":spans,"fonts":fs,
+            "colors":sorted(all_c.items(),key=lambda x:-x[1]),
+            "draw_colors":draw_c,"imgs":img_n,"page_info":pi,
+            "total":len(spans)}
 
-    # sort fonts by usage
-    fonts_summary = []
-    for fname, fdata in sorted(fonts_used.items(), key=lambda x: -x[1]["count"]):
-        fonts_summary.append({
-            "Font Name":  fname,
-            "Used Count": fdata["count"],
-            "Sizes Used": ", ".join(str(s) for s in sorted(fdata["sizes"])),
-            "Bold":       "✅" if fdata["bold"]   else "—",
-            "Italic":     "✅" if fdata["italic"] else "—",
-        })
-
-    # sort colors by frequency
-    colors_sorted = sorted(all_colors.items(), key=lambda x: -x[1])
-
-    return {
-        "text_spans":      text_spans,
-        "fonts_summary":   fonts_summary,
-        "colors_sorted":   colors_sorted,       # list of (hex, count)
-        "drawing_colors":  drawing_colors,
-        "image_count":     image_count,
-        "page_info":       page_info,
-        "total_spans":     len(text_spans),
-    }
-
-
-# ═══════════════════════════════════════════════════════════
-# TABS
-# ═══════════════════════════════════════════════════════════
-TAB_NAMES = [
-    "📘 Viewer & Editor", "🎨 Page Inspector", "➕ Merge", "✂ Split", "🗜 Compress",
-    "🖼 Extract Images", "📄 Extract Text", "📊 Tables",
-    "📑 Reorder", "✍ Signature", "💧 Watermark", "🔍 OCR"
+# ═══════════════════════════════════════════════
+# TABS  — Merge/Split/Compress removed
+# ═══════════════════════════════════════════════
+TABS=[
+    "📘 Viewer & Editor",
+    "🎨 Page Inspector",
+    "🖼 Extract Images",
+    "📄 Extract Text",
+    "📊 Tables",
+    "📑 Reorder",
+    "✍ Signature",
+    "💧 Watermark",
+    "🔍 OCR",
+    "💙 Donate",
 ]
-tabs = st.tabs(TAB_NAMES)
+tabs=st.tabs(TABS)
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 1 — VIEWER + SMART EDITOR
-# ─────────────────────────────────────────────────────────
+# ══════════════════════════════════
+# T0 — VIEWER + FIND & REPLACE
+# ══════════════════════════════════
 with tabs[0]:
     st.subheader("📘 PDF Viewer + Smart Find & Replace")
-    st.caption("Upload a PDF, preview pages, then find & replace text with full formatting control.")
-
-    uploaded = st.file_uploader("📂 Upload PDF (max 50 MB)", type=["pdf"], key="viewer_up")
-
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up=st.file_uploader("📂 Upload PDF",type=["pdf"],key="v_up")
+    if up:
+        pb=get_pdf_bytes(up)
+        ok,msg,pgs=validate_pdf(pb)
+        if not ok: st.error(f"❌ {msg}")
         else:
             st.success(f"✅ {msg}")
-            st.session_state.viewer_pdf_bytes = pdf_bytes
-
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-            with st.expander("📊 PDF Info", expanded=False):
-                show_pdf_info(doc, pdf_bytes)
-
-            # Page preview
-            st.markdown("#### 🖼 Page Preview")
-            col_prev, col_ctrl = st.columns([2, 1])
-            with col_ctrl:
-                preview_page = st.number_input("Preview Page", 1, pages, 1, key="preview_pg")
-            with col_prev:
-                png = render_page_preview(pdf_bytes, preview_page-1, dpi=110)
-                st.image(png, use_container_width=True, caption=f"Page {preview_page} of {pages}")
-
+            st.session_state.viewer_pdf_bytes=pb
+            doc=fitz.open(stream=pb,filetype="pdf")
+            with st.expander("📊 PDF Info",expanded=False): pdf_info(doc,pb)
             doc.close()
+
+            c_l,c_r=st.columns([1,2])
+            with c_l: ppg=st.number_input("Preview Page",1,pgs,1,key="vp")
+            with c_r: st.image(render_preview(pb,ppg-1,110),
+                               caption=f"Page {ppg}/{pgs}",use_container_width=True)
             st.divider()
-
-            # ── EDIT CONTROLS ──
             st.markdown("#### ✏️ Find & Replace")
-            with st.container():
-                c1, c2 = st.columns(2)
-                find_txt    = c1.text_input("🔍 Find Text",    placeholder="Text to search")
-                replace_txt = c2.text_input("✏️ Replace With", placeholder="Replacement text")
+            c1,c2=st.columns(2)
+            vf=c1.text_input("🔍 Find",placeholder="Text to find",key="vf")
+            vr=c2.text_input("✏️ Replace",placeholder="Replacement",key="vr")
+            c1,c2,c3=st.columns(3)
+            vfont=c1.selectbox("Font",FONT_NAMES,key="vfont")
+            vsz=c2.number_input("Size",4.0,72.0,12.0,0.5,key="vsz")
+            vcs=c3.checkbox("Case Sensitive",True,key="vcs")
+            c1,c2,c3,c4=st.columns(4)
+            vbd=c1.checkbox("Bold",key="vbd"); vit=c2.checkbox("Italic",key="vit")
+            vtc=c3.color_picker("Text","#000000",key="vtc")
+            vbc=c4.color_picker("BG","#FFFFFF",key="vbc")
 
-                c1, c2, c3 = st.columns(3)
-                font_family  = c1.selectbox("Font", list(FONT_MAP.keys()))
-                font_size    = c2.number_input("Size", 4.0, 72.0, 12.0, 0.5)
-                case_sens    = c3.checkbox("Case Sensitive", value=True)
-
-                c1, c2, c3, c4, c5 = st.columns(5)
-                is_bold      = c1.checkbox("Bold")
-                is_italic    = c2.checkbox("Italic")
-                is_underline = c3.checkbox("Underline")
-                text_color   = c4.color_picker("Text Color",  "#000000")
-                bg_color     = c5.color_picker("BG Color",    "#FFFFFF")
-
-            if st.button("✨ Apply Find & Replace", use_container_width=True):
-                if not find_txt:
-                    st.warning("⚠️ Enter text to find.")
-                elif not replace_txt:
-                    st.warning("⚠️ Enter replacement text.")
+            if st.button("✨ Apply Replace",use_container_width=True,key="vapp"):
+                if not vf: st.warning("⚠️ Enter find text.")
+                elif not vr: st.warning("⚠️ Enter replace text.")
                 else:
-                    with st.spinner("🔄 Processing..."):
+                    with st.spinner("Processing..."):
                         try:
                             push_undo(st.session_state.viewer_pdf_bytes)
-                            new_bytes, count = smart_find_replace(
-                                st.session_state.viewer_pdf_bytes,
-                                find=find_txt, replace=replace_txt,
-                                font_family=font_family, font_size=font_size,
-                                text_color=text_color, bg_color=bg_color,
-                                bold=is_bold, italic=is_italic,
-                                case_sensitive=case_sens,
-                            )
-                            if count == 0:
-                                st.warning("⚠️ Text not found in document.")
+                            nb,cnt=smart_replace(st.session_state.viewer_pdf_bytes,
+                                                 vf,vr,vfont,vsz,vtc,vbc,vbd,vit,vcs)
+                            if cnt==0: st.warning("⚠️ Not found.")
                             else:
-                                st.session_state.viewer_pdf_bytes = new_bytes
-                                st.success(f"✅ Replaced **{count}** occurrence(s)!")
-                                download_btn(new_bytes, "edited.pdf")
-                                open_in_new_tab(new_bytes)
+                                st.session_state.viewer_pdf_bytes=nb
+                                st.success(f"✅ Replaced {cnt}×!")
+                                download_btn(nb,"edited.pdf"); open_in_new_tab(nb)
                                 whatsapp_share()
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-                            logger.exception("Find & Replace failed")
+                        except Exception as e: st.error(f"❌ {e}")
 
-            # Undo button
             if st.session_state.undo_stack:
-                if st.button("↩ Undo Last Change"):
-                    st.session_state.viewer_pdf_bytes = pop_undo()
-                    st.success("↩ Undone!")
-                    st.rerun()
+                if st.button("↩ Undo",key="vundo"):
+                    st.session_state.viewer_pdf_bytes=pop_undo()
+                    st.success("↩ Done!"); st.rerun()
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 2 — PAGE INSPECTOR (Colors, Fonts, Text Data)
-# ─────────────────────────────────────────────────────────
+# ══════════════════════════════════
+# T1 — PAGE INSPECTOR
+# ══════════════════════════════════
 with tabs[1]:
-    st.subheader("🎨 Page Inspector — Colors, Fonts, Text Styles")
-    st.caption("Deep scan karo kisi bhi PDF page ka — har text span ka font, size, color, bold/italic flag sab dikhega.")
+    st.subheader("🎨 Page Inspector — Colors · Fonts · Text Styles")
+    st.caption("Kisi bhi page ka poora data — phone pe bhi readable mobile cards mein.")
 
-    uploaded_ins = st.file_uploader("📂 Upload PDF", type=["pdf"], key="inspector_up")
-
-    if uploaded_ins:
-        ins_bytes = get_pdf_bytes(uploaded_ins)
-        ok, msg, total_pages = validate_pdf(ins_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up1=st.file_uploader("📂 Upload PDF",type=["pdf"],key="ins_up")
+    if up1:
+        pb1=get_pdf_bytes(up1)
+        ok,msg,tp=validate_pdf(pb1)
+        if not ok: st.error(f"❌ {msg}")
         else:
             st.success(f"✅ {msg}")
+            cl,cr=st.columns([1,2])
+            with cl: ipg=st.number_input("Page",1,tp,1,key="ipg")
+            with cr: st.image(render_preview(pb1,ipg-1,100),
+                              caption=f"Page {ipg}",use_container_width=True)
 
-            col_l, col_r = st.columns([1, 2])
-            with col_l:
-                ins_page = st.number_input("🔎 Select Page to Inspect", 1, total_pages, 1, key="ins_pg")
+            if st.button("🔍 Inspect This Page",use_container_width=True,key="irun"):
+                with st.spinner("Scanning..."):
+                    idata=inspect_page(pb1,ipg-1)
 
-            # Show page preview on right
-            with col_r:
-                png_prev = render_page_preview(ins_bytes, ins_page - 1, dpi=100)
-                st.image(png_prev, caption=f"Page {ins_page} Preview", use_container_width=True)
+                # Page info
+                pi=idata["page_info"]
+                st.markdown("---"); st.markdown("### 📐 Page Info")
+                c1,c2,c3,c4=st.columns(4)
+                c1.metric("Width",f"{pi['width']} pt")
+                c2.metric("Height",f"{pi['height']} pt")
+                c3.metric("Rotation",f"{pi['rotation']}°")
+                c4.metric("Images",idata["imgs"])
+                st.caption(f"Total text spans found: **{idata['total']}**")
 
-            if st.button("🔍 Run Deep Inspection", use_container_width=True, key="run_inspect"):
-                with st.spinner("Scanning page..."):
-                    data = inspect_page_full(ins_bytes, ins_page - 1)
-
-                # ── PAGE INFO ──
-                pi = data["page_info"]
-                st.markdown("---")
-                st.markdown("### 📐 Page Info")
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Width",       f"{pi['width']} pt")
-                c2.metric("Height",      f"{pi['height']} pt")
-                c3.metric("Rotation",    f"{pi['rotation']}°")
-                c4.metric("Images",      data["image_count"])
-
-                st.markdown(f"**Total text spans found:** `{data['total_spans']}`")
-
-                # ── COLOR PALETTE ──
-                st.markdown("---")
-                st.markdown("### 🎨 Color Palette Used on This Page")
-                if data["colors_sorted"]:
-                    # Show swatches in a row using HTML
-                    swatch_html = "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;'>"
-                    for hex_col, count in data["colors_sorted"]:
-                        # Determine text contrast (white or black label)
-                        r_val = int(hex_col[1:3], 16)
-                        g_val = int(hex_col[3:5], 16)
-                        b_val = int(hex_col[5:7], 16)
-                        lum   = 0.299*r_val + 0.587*g_val + 0.114*b_val
-                        txt_col = "#000" if lum > 128 else "#fff"
-                        swatch_html += f"""
-                        <div style='text-align:center; width:90px;'>
-                            <div style='background:{hex_col}; width:70px; height:70px;
-                                        border-radius:12px; border:2px solid #ddd;
-                                        margin:0 auto; box-shadow:0 3px 8px rgba(0,0,0,0.15);
-                                        display:flex; align-items:center; justify-content:center;'>
-                                <span style='color:{txt_col}; font-size:0.65em; font-weight:600;'>{hex_col}</span>
+                # Color palette
+                st.markdown("---"); st.markdown("### 🎨 Color Palette")
+                if idata["colors"]:
+                    sw="<div style='display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;'>"
+                    for hx,cnt in idata["colors"]:
+                        rv,gv,bv=int(hx[1:3],16),int(hx[3:5],16),int(hx[5:7],16)
+                        lum=0.299*rv+0.587*gv+0.114*bv
+                        tc2="#000" if lum>128 else "#fff"
+                        sw+=f"""<div style='text-align:center;width:78px;'>
+                            <div style='background:{hx};width:62px;height:62px;
+                                border-radius:10px;border:2px solid #ddd;margin:0 auto;
+                                box-shadow:0 3px 8px rgba(0,0,0,0.1);
+                                display:flex;align-items:center;justify-content:center;'>
+                                <span style='color:{tc2};font-size:0.58em;font-weight:700;'>{hx}</span>
                             </div>
-                            <div style='font-size:0.75em; color:#555; margin-top:4px;'>
-                                Used: <strong>{count}×</strong>
-                            </div>
+                            <div style='font-size:0.7em;color:#666;margin-top:3px;'>×{cnt}</div>
                         </div>"""
-                    swatch_html += "</div>"
-                    st.markdown(swatch_html, unsafe_allow_html=True)
-                else:
-                    st.info("No colors detected on this page.")
+                    st.markdown(sw+"</div>",unsafe_allow_html=True)
+                else: st.info("No colors.")
+                if idata["draw_colors"]:
+                    st.markdown("**🖊 Drawing/Shape Colors:**")
+                    st.dataframe(pd.DataFrame(idata["draw_colors"]),
+                                 use_container_width=True,hide_index=True)
 
-                # Drawing colors separately
-                if data["drawing_colors"]:
-                    st.markdown("**🖊 Drawing / Shape Colors:**")
-                    st.dataframe(pd.DataFrame(data["drawing_colors"]), use_container_width=True, hide_index=True)
+                # Fonts
+                st.markdown("---"); st.markdown("### 🔤 Fonts Used")
+                if idata["fonts"]:
+                    st.dataframe(pd.DataFrame(idata["fonts"]),
+                                 use_container_width=True,hide_index=True,
+                                 column_config={
+                                     "Font Name":st.column_config.TextColumn(width="large"),
+                                     "Used":st.column_config.NumberColumn(width="small"),
+                                     "Sizes":st.column_config.TextColumn(width="medium"),
+                                 })
+                else: st.info("No fonts.")
 
-                # ── FONTS SUMMARY ──
+                # Mobile cards
                 st.markdown("---")
-                st.markdown("### 🔤 Fonts Used on This Page")
-                if data["fonts_summary"]:
-                    df_fonts = pd.DataFrame(data["fonts_summary"])
-                    st.dataframe(df_fonts, use_container_width=True, hide_index=True)
+                st.markdown("### 📝 Text Spans — Mobile Card View")
+                if idata["spans"]:
+                    af=sorted(set(s["font"] for s in idata["spans"]))
+                    fc1,fc2,fc3=st.columns(3)
+                    ff=fc1.selectbox("Font",["All"]+af,key="iff")
+                    fb=fc2.selectbox("Bold",["All","✅ Bold","— Normal"],key="ifb")
+                    fi=fc3.selectbox("Italic",["All","✅ Italic","— Normal"],key="ifi")
 
-                    # Visual bar chart of font usage
-                    if len(df_fonts) > 1:
-                        st.markdown("**Font Usage Count:**")
-                        st.bar_chart(
-                            df_fonts.set_index("Font Name")["Used Count"],
-                            use_container_width=True,
-                            height=200
-                        )
+                    fspans=idata["spans"]
+                    if ff!="All": fspans=[s for s in fspans if s["font"]==ff]
+                    if fb=="✅ Bold":    fspans=[s for s in fspans if s["bold"]]
+                    elif fb=="— Normal": fspans=[s for s in fspans if not s["bold"]]
+                    if fi=="✅ Italic":   fspans=[s for s in fspans if s["italic"]]
+                    elif fi=="— Normal": fspans=[s for s in fspans if not s["italic"]]
+
+                    st.caption(f"Showing {len(fspans)} of {len(idata['spans'])} spans")
+
+                    cards=""
+                    for sp in fspans[:80]:
+                        td=sp["text"][:90]+("…" if len(sp["text"])>90 else "")
+                        lum2=0.299*sp["r"]+0.587*sp["g"]+0.114*sp["b"]
+                        chips=(f"<span class='sc-chip'>🔤 {sp['font'][:20]}</span>"
+                               f"<span class='sc-chip'>📏 {sp['size']} pt</span>"
+                               f"<span class='sc-chip' style='background:{sp['color']};"
+                               f"color:{'#000' if lum2>128 else '#fff'};border-color:{sp['color']};'>"
+                               f"● {sp['color']}</span>")
+                        if sp["bold"]:   chips+="<span class='sc-chip bold'>B Bold</span>"
+                        if sp["italic"]: chips+="<span class='sc-chip italic'>I Italic</span>"
+                        if sp["mono"]:   chips+="<span class='sc-chip mono'>⌨ Mono</span>"
+                        cards+=f"<div class='span-card'><div class='sc-text'>\"{td}\"</div><div class='sc-meta'>{chips}</div></div>"
+
+                    if len(fspans)>80:
+                        cards+=f"<p style='color:#999;text-align:center;font-size:0.78em;'>...aur {len(fspans)-80} spans — CSV download karo</p>"
+
+                    st.markdown(f"<div style='max-height:520px;overflow-y:auto;padding:2px;'>{cards}</div>",
+                                unsafe_allow_html=True)
+
+                    df_dl=pd.DataFrame([{"Text":s["text"],"Font":s["font"],
+                        "Size":s["size"],"Color":s["color"],
+                        "Bold":s["bold"],"Italic":s["italic"]} for s in fspans])
+                    st.download_button("⬇ Download CSV",df_dl.to_csv(index=False).encode(),
+                                       f"p{ipg}_spans.csv","text/csv",use_container_width=True)
+                else: st.info("No text found.")
+
+            # ── FIND & REPLACE inside Inspector ──────────────
+            st.markdown("---")
+            st.markdown("### ✏️ Edit This PDF — Find & Replace")
+            st.caption("Inspect karne ke baad yahan se seedha edit karo.")
+            c1,c2=st.columns(2)
+            if_=c1.text_input("🔍 Find",key="if_",placeholder="Dhundna hai")
+            ir_=c2.text_input("✏️ Replace",key="ir_",placeholder="Replace karna hai")
+            c1,c2,c3=st.columns(3)
+            ifnt=c1.selectbox("Font",FONT_NAMES,key="ifnt")
+            isz=c2.number_input("Size",4.0,72.0,12.0,0.5,key="isz")
+            ics=c3.checkbox("Case Sensitive",True,key="ics")
+            c1,c2,c3,c4=st.columns(4)
+            ibd=c1.checkbox("Bold",key="ibd"); iit=c2.checkbox("Italic",key="iit")
+            itc=c3.color_picker("Text","#000000",key="itc")
+            ibc=c4.color_picker("BG","#FFFFFF",key="ibc")
+
+            iscope=st.radio("Replace on:",
+                            [f"Only Page {ipg if up1 else 1}","All Pages"],
+                            horizontal=True,key="iscope")
+
+            if st.button("✨ Apply Replace",use_container_width=True,key="iapp"):
+                if not if_: st.warning("⚠️ Find text daalo.")
+                elif not ir_: st.warning("⚠️ Replace text daalo.")
                 else:
-                    st.info("No fonts detected on this page.")
+                    with st.spinner("Processing..."):
+                        try:
+                            push_undo(pb1)
+                            if "All Pages" in iscope:
+                                rb,_=smart_replace(pb1,if_,ir_,ifnt,isz,itc,ibc,ibd,iit,ics)
+                            else:
+                                doc_t=fitz.open(stream=pb1,filetype="pdf")
+                                tot_t=len(doc_t); doc_t.close()
+                                parts=[]
+                                if ipg>1:
+                                    bfr=split_range(pb1,f"1-{ipg-1}")
+                                    parts.append(list(bfr.values())[0])
+                                single=split_range(pb1,str(ipg))
+                                es,_=smart_replace(list(single.values())[0],
+                                                   if_,ir_,ifnt,isz,itc,ibc,ibd,iit,ics)
+                                parts.append(es)
+                                if ipg<tot_t:
+                                    aft=split_range(pb1,f"{ipg+1}-{tot_t}")
+                                    parts.append(list(aft.values())[0])
+                                rb=merge_pdfs(parts) if len(parts)>1 else es
 
-                # ── TEXT SPANS TABLE ──
-                st.markdown("---")
-                st.markdown("### 📝 All Text Spans — Font · Size · Color · Style")
-                if data["text_spans"]:
-                    df_spans = pd.DataFrame(data["text_spans"]).drop(
-                        columns=["_raw_color","_r","_g","_b"], errors="ignore"
-                    )
-
-                    # Add filter controls
-                    col_f1, col_f2, col_f3 = st.columns(3)
-                    filter_font  = col_f1.selectbox("Filter by Font",
-                                                     ["All"] + sorted(df_spans["Font"].unique().tolist()),
-                                                     key="filter_font")
-                    filter_bold  = col_f2.selectbox("Filter Bold",  ["All","✅","—"], key="filter_bold")
-                    filter_ital  = col_f3.selectbox("Filter Italic",["All","✅","—"], key="filter_ital")
-
-                    filtered = df_spans.copy()
-                    if filter_font != "All":
-                        filtered = filtered[filtered["Font"] == filter_font]
-                    if filter_bold != "All":
-                        filtered = filtered[filtered["Bold"] == filter_bold]
-                    if filter_ital != "All":
-                        filtered = filtered[filtered["Italic"] == filter_ital]
-
-                    st.caption(f"Showing {len(filtered)} of {len(df_spans)} spans")
-
-                    # Render with inline color swatch in Color column
-                    def color_cell(hex_col):
-                        return f'<span style="background:{hex_col};display:inline-block;' \
-                               f'width:14px;height:14px;border-radius:3px;' \
-                               f'border:1px solid #ccc;vertical-align:middle;margin-right:5px;"></span>{hex_col}'
-
-                    # Use st.dataframe with styling (no HTML here, Streamlit doesn't support it in dataframe)
-                    st.dataframe(
-                        filtered,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "Text":  st.column_config.TextColumn("📝 Text",       width="large"),
-                            "Font":  st.column_config.TextColumn("🔤 Font",       width="medium"),
-                            "Size":  st.column_config.NumberColumn("📏 Size",     width="small",  format="%.1f pt"),
-                            "Color": st.column_config.TextColumn("🎨 Color (hex)",width="small"),
-                            "Bold":  st.column_config.TextColumn("B",             width="small"),
-                            "Italic":st.column_config.TextColumn("I",             width="small"),
-                            "Monospace": st.column_config.TextColumn("Mono",      width="small"),
-                        }
-                    )
-
-                    # Download as CSV / Excel
-                    col_dl1, col_dl2 = st.columns(2)
-                    with col_dl1:
-                        csv = filtered.to_csv(index=False).encode()
-                        st.download_button("⬇ Download as CSV", csv,
-                                           f"page{ins_page}_text_data.csv", "text/csv",
-                                           use_container_width=True)
-                    with col_dl2:
-                        xl_buf = io.BytesIO()
-                        with pd.ExcelWriter(xl_buf, engine="openpyxl") as w:
-                            filtered.to_excel(w, sheet_name=f"Page{ins_page}", index=False)
-                        st.download_button("⬇ Download as Excel", xl_buf.getvalue(),
-                                           f"page{ins_page}_text_data.xlsx",
-                                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                           use_container_width=True)
-                else:
-                    st.info("No text found on this page.")
-
-                # ═══════════════════════════════════════════════
-                # ✏️ FIND & REPLACE — directly inside Inspector
-                # ═══════════════════════════════════════════════
-                st.markdown("---")
-                st.markdown("### ✏️ Edit This Page — Find & Replace")
-                st.caption("Inspection ke baad seedha yahan se text replace karo, same page pe.")
-
-                with st.container():
-                    fe1, fe2 = st.columns(2)
-                    ins_find    = fe1.text_input("🔍 Find Text",    key="ins_find",    placeholder="Jo text dhundna hai")
-                    ins_replace = fe2.text_input("✏️ Replace With", key="ins_replace", placeholder="Jo text likhna hai")
-
-                    fc1, fc2, fc3 = st.columns(3)
-                    ins_font     = fc1.selectbox("Font", list(FONT_MAP.keys()), key="ins_font")
-                    ins_size     = fc2.number_input("Size", 4.0, 72.0, 12.0, 0.5, key="ins_fsize")
-                    ins_case     = fc3.checkbox("Case Sensitive", value=True, key="ins_case")
-
-                    fd1, fd2, fd3, fd4 = st.columns(4)
-                    ins_bold     = fd1.checkbox("Bold",   key="ins_bold")
-                    ins_italic   = fd2.checkbox("Italic", key="ins_italic")
-                    ins_tcol     = fd3.color_picker("Text Color", "#000000", key="ins_tcol")
-                    ins_bgcol    = fd4.color_picker("BG Color",   "#FFFFFF", key="ins_bgcol")
-
-                    # Scope: replace only on inspected page OR all pages
-                    ins_scope = st.radio(
-                        "Replace on which pages?",
-                        [f"Only Page {ins_page}", "All Pages"],
-                        horizontal=True, key="ins_scope"
-                    )
-
-                if st.button("✨ Apply Replace", use_container_width=True, key="ins_apply"):
-                    if not ins_find:
-                        st.warning("⚠️ Find text daalo.")
-                    elif not ins_replace:
-                        st.warning("⚠️ Replace text daalo.")
-                    else:
-                        with st.spinner("Processing..."):
-                            try:
-                                if ins_scope == "All Pages":
-                                    target_bytes = ins_bytes
-                                else:
-                                    # Extract only the target page, edit, then re-merge
-                                    target_bytes = ins_bytes
-
-                                push_undo(ins_bytes)
-
-                                if ins_scope == f"Only Page {ins_page}":
-                                    # Split: pages before + edited page + pages after
-                                    doc_tmp   = fitz.open(stream=ins_bytes, filetype="pdf")
-                                    total_tmp = len(doc_tmp)
-                                    doc_tmp.close()
-
-                                    parts = []
-                                    # Pages before
-                                    if ins_page > 1:
-                                        before = split_pdf_by_range(ins_bytes, f"1-{ins_page-1}")
-                                        parts.append(list(before.values())[0])
-
-                                    # Edit only target page (extracted as single-page PDF)
-                                    single = split_pdf_by_range(ins_bytes, str(ins_page))
-                                    single_bytes = list(single.values())[0]
-                                    edited_single, count = smart_find_replace(
-                                        single_bytes, ins_find, ins_replace,
-                                        ins_font, ins_size, ins_tcol, ins_bgcol,
-                                        ins_bold, ins_italic, ins_case
-                                    )
-                                    parts.append(edited_single)
-
-                                    # Pages after
-                                    if ins_page < total_tmp:
-                                        after = split_pdf_by_range(ins_bytes, f"{ins_page+1}-{total_tmp}")
-                                        parts.append(list(after.values())[0])
-
-                                    new_bytes = merge_pdfs(parts) if len(parts) > 1 else edited_single
-
-                                else:
-                                    new_bytes, count = smart_find_replace(
-                                        ins_bytes, ins_find, ins_replace,
-                                        ins_font, ins_size, ins_tcol, ins_bgcol,
-                                        ins_bold, ins_italic, ins_case
-                                    )
-                                    count = count  # already set
-
-                                st.success(f"✅ Text replace ho gaya!")
-                                st.info("👇 Edited PDF download karo:")
-                                download_btn(new_bytes, "edited_inspected.pdf")
-                                open_in_new_tab(new_bytes)
-
-                            except Exception as e:
-                                st.error(f"❌ Error: {e}")
-                                logger.exception("Inspector Find & Replace failed")
+                            st.success("✅ Replace ho gaya!")
+                            download_btn(rb,"edited.pdf"); open_in_new_tab(rb)
+                        except Exception as e:
+                            st.error(f"❌ {e}")
+                            logger.exception("Inspector replace error")
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 3 — MERGE
-# ─────────────────────────────────────────────────────────
+# ══════════════════════════════════
+# T2 — EXTRACT IMAGES
+# ══════════════════════════════════
 with tabs[2]:
-    st.subheader("➕ Merge Multiple PDFs")
-    st.caption("Upload 2 or more PDFs — they will be merged in upload order.")
-
-    files = st.file_uploader("📂 Upload PDFs", type=["pdf"], accept_multiple_files=True, key="merge_up")
-
-    if files:
-        st.markdown(f"**{len(files)} file(s) uploaded:**")
-        valid_bytes = []
-        for f in files:
-            data = get_pdf_bytes(f)
-            ok, msg, _ = validate_pdf(data)
-            st.write(f"{'✅' if ok else '❌'} `{f.name}` — {msg}")
-            if ok:
-                valid_bytes.append((f.name, data))
-
-        if len(valid_bytes) >= 2:
-            if st.button("🔗 Merge PDFs", use_container_width=True):
-                with st.spinner("Merging..."):
-                    try:
-                        merged = merge_pdfs([b for _, b in valid_bytes])
-                        st.success(f"✅ Merged {len(valid_bytes)} PDFs successfully!")
-                        download_btn(merged, "merged_output.pdf")
-                        open_in_new_tab(merged)
-                        whatsapp_share()
-                    except Exception as e:
-                        st.error(f"❌ Merge failed: {e}")
-        else:
-            st.info("ℹ️ Upload at least 2 valid PDFs to merge.")
-
-
-# ─────────────────────────────────────────────────────────
-# TAB 3 — SPLIT
-# ─────────────────────────────────────────────────────────
-with tabs[3]:
-    st.subheader("✂ Split PDF")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="split_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, total_pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
-        else:
-            st.success(f"✅ {msg}")
-            split_mode = st.radio("Split Mode", ["By Page Ranges", "Every N Pages", "Each Page Separately"])
-
-            if split_mode == "By Page Ranges":
-                st.caption(f"Total pages: {total_pages}  |  Example: `1-3, 5, 7-9`")
-                ranges = st.text_input("Page Ranges", placeholder="1-3, 5, 7-9")
-                if st.button("✂ Split", use_container_width=True) and ranges:
-                    with st.spinner("Splitting..."):
-                        try:
-                            parts = split_pdf_by_range(pdf_bytes, ranges)
-                            st.success(f"✅ Created {len(parts)} part(s)")
-                            for fname, data in parts.items():
-                                download_btn(data, fname, f"⬇ {fname}")
-                        except Exception as e:
-                            st.error(f"❌ {e}")
-
-            elif split_mode == "Every N Pages":
-                n = st.number_input("Pages per chunk", 1, total_pages, min(5, total_pages))
-                if st.button("✂ Split", use_container_width=True):
-                    with st.spinner("Splitting..."):
-                        try:
-                            parts = split_pdf_every_n(pdf_bytes, n)
-                            st.success(f"✅ Created {len(parts)} chunk(s)")
-                            for fname, data in parts.items():
-                                download_btn(data, fname, f"⬇ {fname}")
-                        except Exception as e:
-                            st.error(f"❌ {e}")
-
-            else:  # Each page
-                if st.button("✂ Extract All Pages", use_container_width=True):
-                    with st.spinner("Splitting..."):
-                        try:
-                            parts = split_pdf_every_n(pdf_bytes, 1)
-                            # Zip them
-                            zip_buf = io.BytesIO()
-                            with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                                for fname, data in parts.items():
-                                    zf.writestr(fname, data)
-                            st.success(f"✅ {len(parts)} pages extracted")
-                            st.download_button("⬇ Download All Pages (ZIP)", zip_buf.getvalue(),
-                                               "all_pages.zip", "application/zip",
-                                               use_container_width=True)
-                        except Exception as e:
-                            st.error(f"❌ {e}")
-
-
-# ─────────────────────────────────────────────────────────
-# TAB 4 — COMPRESS
-# ─────────────────────────────────────────────────────────
-with tabs[4]:
-    st.subheader("🗜 Compress PDF")
-    st.caption("Reduces file size by re-compressing images and cleaning the PDF structure.")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="compress_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, _ = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
-        else:
-            orig_kb = len(pdf_bytes) / 1024
-            st.info(f"📦 Original size: **{orig_kb:.1f} KB**")
-
-            quality = st.slider("Image Quality (lower = smaller file)", 10, 95, 60, 5,
-                                help="JPEG quality for embedded images")
-
-            if st.button("🗜 Compress PDF", use_container_width=True):
-                with st.spinner("Compressing..."):
-                    try:
-                        compressed = compress_pdf(pdf_bytes, quality)
-                        new_kb     = len(compressed) / 1024
-                        saving_pct = (1 - new_kb/orig_kb) * 100
-
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Original",   f"{orig_kb:.1f} KB")
-                        col2.metric("Compressed", f"{new_kb:.1f} KB")
-                        col3.metric("Saved",      f"{saving_pct:.1f}%")
-
-                        download_btn(compressed, "compressed.pdf")
-                        open_in_new_tab(compressed)
-                    except Exception as e:
-                        st.error(f"❌ Compression error: {e}")
-                        st.info("💡 Tip: Install Pillow (`pip install Pillow`) for image compression.")
-
-
-# ─────────────────────────────────────────────────────────
-# TAB 5 — EXTRACT IMAGES
-# ─────────────────────────────────────────────────────────
-with tabs[5]:
     st.subheader("🖼 Extract Images from PDF")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="img_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, _ = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up2=st.file_uploader("📂 Upload PDF",type=["pdf"],key="img_up")
+    if up2:
+        pb2=get_pdf_bytes(up2)
+        ok,msg,_=validate_pdf(pb2)
+        if not ok: st.error(f"❌ {msg}")
         else:
-            if st.button("🔍 Extract Images", use_container_width=True):
-                with st.spinner("Extracting..."):
-                    imgs = extract_images_from_pdf(pdf_bytes)
-
-                if not imgs:
-                    st.warning("No images found in this PDF.")
+            if st.button("🔍 Extract Images",use_container_width=True):
+                with st.spinner("Extracting..."): imgs=extract_images(pb2)
+                if not imgs: st.warning("No images found.")
                 else:
-                    st.success(f"✅ Found **{len(imgs)}** image(s)")
-
-                    # Zip all images
-                    zip_buf = io.BytesIO()
-                    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    st.success(f"✅ Found {len(imgs)} image(s)")
+                    zb=io.BytesIO()
+                    with zipfile.ZipFile(zb,'w',zipfile.ZIP_DEFLATED) as zf:
                         for img in imgs:
-                            zf.writestr(f"page{img['page']}_img{img['index']}.{img['ext']}", img['data'])
-                    st.download_button("⬇ Download All Images (ZIP)", zip_buf.getvalue(),
-                                       "extracted_images.zip", "application/zip",
-                                       use_container_width=True)
-
-                    # Preview grid
-                    st.markdown("#### Preview")
-                    cols = st.columns(4)
-                    for i, img in enumerate(imgs[:12]):
-                        with cols[i % 4]:
-                            st.image(img['data'],
-                                     caption=f"P{img['page']} · {img['width']}×{img['height']}",
-                                     use_container_width=True)
-                    if len(imgs) > 12:
-                        st.caption(f"... and {len(imgs)-12} more images (download ZIP to get all)")
+                            zf.writestr(f"p{img['page']}_i{img['index']}.{img['ext']}",img['data'])
+                    st.download_button("⬇ Download All (ZIP)",zb.getvalue(),
+                                       "images.zip","application/zip",use_container_width=True)
+                    cols=st.columns(3)
+                    for i,img in enumerate(imgs[:9]):
+                        cols[i%3].image(img['data'],
+                                        caption=f"P{img['page']} {img['width']}×{img['height']}",
+                                        use_container_width=True)
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 6 — EXTRACT TEXT
-# ─────────────────────────────────────────────────────────
-with tabs[6]:
+# ══════════════════════════════════
+# T3 — EXTRACT TEXT
+# ══════════════════════════════════
+with tabs[3]:
     st.subheader("📄 Extract Text from PDF")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="text_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up3=st.file_uploader("📂 Upload PDF",type=["pdf"],key="txt_up")
+    if up3:
+        pb3=get_pdf_bytes(up3)
+        ok,msg,pg3=validate_pdf(pb3)
+        if not ok: st.error(f"❌ {msg}")
         else:
-            col1, col2 = st.columns(2)
-            text_mode  = col1.selectbox("Extract Mode", ["plain","blocks","html"])
-            page_filter = col2.text_input("Pages (blank = all)", placeholder="e.g. 1, 3, 5-7")
-
-            if st.button("📄 Extract Text", use_container_width=True):
-                with st.spinner("Extracting..."):
-                    texts = extract_text_from_pdf(pdf_bytes, mode=text_mode)
-
-                # Apply page filter
-                if page_filter.strip():
-                    selected = set()
-                    for part in page_filter.split(','):
-                        part = part.strip()
-                        if '-' in part:
-                            a, b = part.split('-')
-                            selected.update(range(int(a), int(b)+1))
-                        elif part.isdigit():
-                            selected.add(int(part))
-                    texts = {p: t for p, t in texts.items() if p in selected}
-
-                if not texts:
-                    st.warning("No text found.")
+            c1,c2=st.columns(2)
+            tm=c1.selectbox("Mode",["plain","blocks","html"])
+            pf=c2.text_input("Pages (blank=all)",placeholder="1, 3, 5-7")
+            if st.button("📄 Extract",use_container_width=True):
+                txts=extract_text(pb3,tm)
+                if pf.strip():
+                    sel=set()
+                    for p in pf.split(','):
+                        p=p.strip()
+                        if '-' in p: a,b=p.split('-'); sel.update(range(int(a),int(b)+1))
+                        elif p.isdigit(): sel.add(int(p))
+                    txts={p:t for p,t in txts.items() if p in sel}
+                if not txts: st.warning("No text.")
                 else:
-                    full_text = "\n\n".join(f"--- Page {p} ---\n{t}" for p, t in texts.items())
-                    st.text_area("Extracted Text", full_text, height=350)
-                    st.download_button("⬇ Download as .txt", full_text.encode(),
-                                       "extracted_text.txt", "text/plain",
-                                       use_container_width=True)
+                    full="\n\n".join(f"--- Page {p} ---\n{t}" for p,t in txts.items())
+                    st.text_area("Text",full,height=350)
+                    st.download_button("⬇ Download .txt",full.encode(),
+                                       "text.txt","text/plain",use_container_width=True)
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 7 — EXTRACT TABLES
-# ─────────────────────────────────────────────────────────
-with tabs[7]:
+# ══════════════════════════════════
+# T4 — TABLES
+# ══════════════════════════════════
+with tabs[4]:
     st.subheader("📊 Extract Tables from PDF")
-    st.caption("Uses PyMuPDF's built-in table detection (works best on text-based PDFs with clear borders).")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="table_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, _ = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up4=st.file_uploader("📂 Upload PDF",type=["pdf"],key="tbl_up")
+    if up4:
+        pb4=get_pdf_bytes(up4)
+        ok,msg,_=validate_pdf(pb4)
+        if not ok: st.error(f"❌ {msg}")
         else:
-            if st.button("📊 Find Tables", use_container_width=True):
-                with st.spinner("Detecting tables..."):
-                    all_tables = extract_tables_from_pdf(pdf_bytes)
-
-                if not all_tables:
-                    st.warning("No tables detected. Try a PDF with clearly bordered tables.")
+            if st.button("📊 Find Tables",use_container_width=True):
+                with st.spinner("Detecting..."): all_t=extract_tables(pb4)
+                if not all_t: st.warning("No tables detected.")
                 else:
-                    total = sum(len(v) for v in all_tables.values())
-                    st.success(f"✅ Found **{total}** table(s) across {len(all_tables)} page(s)")
-
-                    excel_buf = io.BytesIO()
-                    with pd.ExcelWriter(excel_buf, engine='openpyxl') as writer:
-                        sheet_idx = 1
-                        for page_num, dfs in all_tables.items():
-                            for i, df in enumerate(dfs):
-                                st.markdown(f"**Page {page_num} — Table {i+1}**")
-                                st.dataframe(df, use_container_width=True)
-                                df.to_excel(writer, sheet_name=f"P{page_num}_T{i+1}", index=False)
-                                sheet_idx += 1
-
-                    st.download_button("⬇ Download All Tables (Excel)",
-                                       excel_buf.getvalue(), "tables.xlsx",
-                                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                       use_container_width=True)
+                    st.success(f"✅ Found {sum(len(v) for v in all_t.values())} table(s)")
+                    xl=io.BytesIO()
+                    with pd.ExcelWriter(xl,engine='openpyxl') as w:
+                        for pn,dfs in all_t.items():
+                            for i,df in enumerate(dfs):
+                                st.markdown(f"**Page {pn} — Table {i+1}**")
+                                st.dataframe(df,use_container_width=True)
+                                df.to_excel(w,sheet_name=f"P{pn}_T{i+1}",index=False)
+                    st.download_button("⬇ Download Excel",xl.getvalue(),"tables.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True)
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 8 — REORDER PAGES
-# ─────────────────────────────────────────────────────────
-with tabs[8]:
+# ══════════════════════════════════
+# T5 — REORDER
+# ══════════════════════════════════
+with tabs[5]:
     st.subheader("📑 Reorder PDF Pages")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="reorder_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, total_pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+    up5=st.file_uploader("📂 Upload PDF",type=["pdf"],key="ro_up")
+    if up5:
+        pb5=get_pdf_bytes(up5)
+        ok,msg,tp5=validate_pdf(pb5)
+        if not ok: st.error(f"❌ {msg}")
         else:
             st.success(f"✅ {msg}")
-            st.caption(f"Original order: 1 to {total_pages}")
-            new_order_str = st.text_input(
-                "New Page Order (comma-separated, 1-based)",
-                value=", ".join(str(i) for i in range(1, total_pages+1)),
-                help="Example: 3,1,2 puts page 3 first, then 1, then 2"
-            )
-
-            # Preview thumbnails
-            if st.checkbox("Show Page Thumbnails"):
-                cols = st.columns(min(total_pages, 6))
-                for i in range(min(total_pages, 6)):
-                    png = render_page_preview(pdf_bytes, i, dpi=60)
-                    cols[i].image(png, caption=f"Pg {i+1}", use_container_width=True)
-
-            if st.button("📑 Apply New Order", use_container_width=True):
+            no=st.text_input("New Order",value=", ".join(str(i) for i in range(1,tp5+1)))
+            if st.checkbox("Show Thumbnails"):
+                cs=st.columns(min(tp5,5))
+                for i in range(min(tp5,5)):
+                    cs[i].image(render_preview(pb5,i,60),caption=f"Pg {i+1}",use_container_width=True)
+            if st.button("📑 Apply",use_container_width=True):
                 try:
-                    order = [int(x.strip()) for x in new_order_str.split(',') if x.strip()]
-                    if len(order) == 0:
-                        st.error("❌ Enter at least one page number.")
-                    else:
-                        with st.spinner("Reordering..."):
-                            reordered = reorder_pdf_pages(pdf_bytes, order)
-                        st.success("✅ Pages reordered!")
-                        download_btn(reordered, "reordered.pdf")
-                        open_in_new_tab(reordered)
-                except ValueError:
-                    st.error("❌ Invalid page order — use comma-separated numbers like: 3, 1, 2")
+                    ord_=[int(x.strip()) for x in no.split(',') if x.strip()]
+                    with st.spinner("Reordering..."): res=reorder_pages(pb5,ord_)
+                    st.success("✅ Done!"); download_btn(res,"reordered.pdf"); open_in_new_tab(res)
+                except: st.error("❌ Invalid order")
 
 
-# ─────────────────────────────────────────────────────────
-# TAB 9 — SIGNATURE
-# ─────────────────────────────────────────────────────────
-with tabs[9]:
-    st.subheader("✍ Add Signature to PDF")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="sig_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, total_pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
+# ══════════════════════════════════
+# T6 — SIGNATURE
+# ══════════════════════════════════
+with tabs[6]:
+    st.subheader("✍ Add Signature")
+    up6=st.file_uploader("📂 Upload PDF",type=["pdf"],key="sig_up")
+    if up6:
+        pb6=get_pdf_bytes(up6)
+        ok,msg,tp6=validate_pdf(pb6)
+        if not ok: st.error(f"❌ {msg}")
         else:
-            sig_type = st.radio("Signature Type", ["Text Signature", "Image Signature"])
-
-            if sig_type == "Text Signature":
-                col1, col2 = st.columns(2)
-                sig_text  = col1.text_input("Signature Text", placeholder="Your Name / Designation")
-                sig_color = col2.color_picker("Ink Color", "#1a237e")
-                col1, col2, col3 = st.columns(3)
-                sig_page = col1.number_input("Page", 1, total_pages, total_pages)
-                sig_x    = col2.number_input("X Position", 0, 800, 400)
-                sig_y    = col3.number_input("Y Position", 0, 1200, 750)
-                sig_size = st.slider("Font Size", 8, 36, 14)
-
-                if st.button("✍ Add Text Signature", use_container_width=True):
-                    if not sig_text:
-                        st.warning("Enter signature text.")
+            st=st  # scope fix not needed, using direct calls
+            stype=globals()['st'].radio("Type",["Text","Image"],horizontal=True,key="stype")
+            if stype=="Text":
+                c1,c2=globals()['st'].columns(2)
+                stxt=c1.text_input("Text"); scol=c2.color_picker("Color","#1a237e")
+                c1,c2,c3=globals()['st'].columns(3)
+                spg=c1.number_input("Page",1,tp6,tp6)
+                sx=c2.number_input("X",0,800,400); sy=c3.number_input("Y",0,1200,750)
+                ssz=globals()['st'].slider("Font Size",8,36,14)
+                if globals()['st'].button("✍ Add Signature",use_container_width=True):
+                    if not stxt: globals()['st'].warning("Enter text.")
                     else:
-                        with st.spinner("Adding signature..."):
-                            result = add_text_signature(pdf_bytes, sig_text, sig_page,
-                                                         sig_x, sig_y, sig_size, sig_color)
-                        st.success("✅ Signature added!")
-                        download_btn(result, "signed.pdf")
-                        open_in_new_tab(result)
-
-            else:  # Image
-                sig_img = st.file_uploader("Upload Signature Image (PNG/JPG)", type=["png","jpg","jpeg"], key="sig_img")
-                if sig_img:
-                    col1, col2, col3 = st.columns(3)
-                    sig_page = col1.number_input("Page", 1, total_pages, total_pages)
-                    sig_x    = col2.number_input("X",    0, 800, 350)
-                    sig_y    = col3.number_input("Y",    0, 1200, 700)
-                    col1, col2 = st.columns(2)
-                    sig_w = col1.number_input("Width",  20, 400, 150)
-                    sig_h = col2.number_input("Height", 10, 200, 60)
-                    st.image(sig_img, width=200, caption="Signature Preview")
-
-                    if st.button("✍ Add Image Signature", use_container_width=True):
-                        with st.spinner("Adding signature..."):
-                            result = add_image_signature(pdf_bytes, sig_img.read(),
-                                                          sig_page, sig_x, sig_y, sig_w, sig_h)
-                        st.success("✅ Signature added!")
-                        download_btn(result, "signed.pdf")
-                        open_in_new_tab(result)
-
-
-# ─────────────────────────────────────────────────────────
-# TAB 10 — WATERMARK
-# ─────────────────────────────────────────────────────────
-with tabs[10]:
-    st.subheader("💧 Watermark Tools")
-
-    uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="wm_up")
-    if uploaded:
-        pdf_bytes = get_pdf_bytes(uploaded)
-        ok, msg, total_pages = validate_pdf(pdf_bytes)
-
-        if not ok:
-            st.error(f"❌ {msg}")
-        else:
-            wm_type = st.radio("Watermark Type", ["Text Watermark", "Image Watermark"])
-
-            if wm_type == "Text Watermark":
-                col1, col2 = st.columns(2)
-                wm_text  = col1.text_input("Watermark Text", "CONFIDENTIAL")
-                wm_color = col2.color_picker("Color", "#FF0000")
-                col1, col2, col3, col4 = st.columns(4)
-                wm_size    = col1.number_input("Font Size", 10, 150, 60)
-                wm_angle   = col2.number_input("Angle (°)",  0, 360, 45)
-                wm_opacity = col3.slider("Opacity", 0.01, 0.99, 0.15, 0.01)
-                wm_pages   = col4.text_input("Pages (blank=all)", placeholder="all")
-
-                if st.button("💧 Apply Text Watermark", use_container_width=True):
-                    with st.spinner("Applying watermark..."):
-                        result = add_text_watermark(
-                            pdf_bytes, wm_text, wm_opacity, wm_color,
-                            wm_size, wm_angle, wm_pages.strip() or "all"
-                        )
-                    st.success("✅ Watermark applied!")
-                    download_btn(result, "watermarked.pdf")
-                    open_in_new_tab(result)
-
-            else:  # Image watermark
-                wm_img = st.file_uploader("Upload Watermark Image", type=["png","jpg","jpeg"], key="wm_img")
-                if wm_img:
-                    wm_opacity = st.slider("Opacity", 0.01, 0.99, 0.2, 0.01)
-                    st.image(wm_img, width=150, caption="Watermark Preview")
-                    if st.button("💧 Apply Image Watermark", use_container_width=True):
-                        with st.spinner("Applying watermark..."):
-                            result = add_image_watermark(pdf_bytes, wm_img.read(), wm_opacity)
-                        st.success("✅ Watermark applied!")
-                        download_btn(result, "watermarked.pdf")
-                        open_in_new_tab(result)
-
-
-# ─────────────────────────────────────────────────────────
-# TAB 11 — OCR
-# ─────────────────────────────────────────────────────────
-with tabs[11]:
-    st.subheader("🔍 OCR Scanner")
-    st.caption("Extract text from scanned / image-based PDFs using Tesseract OCR.")
-
-    if not check_ocr():
-        st.error("❌ OCR libraries not installed.")
-        st.code("pip install pytesseract pillow\n# Also install Tesseract: https://github.com/tesseract-ocr/tesseract")
-    else:
-        uploaded = st.file_uploader("📂 Upload PDF (scanned)", type=["pdf"], key="ocr_up")
-        if uploaded:
-            pdf_bytes = get_pdf_bytes(uploaded)
-            ok, msg, total_pages = validate_pdf(pdf_bytes)
-
-            if not ok:
-                st.error(f"❌ {msg}")
+                        res=add_text_sig(pb6,stxt,spg,sx,sy,ssz,scol)
+                        globals()['st'].success("✅ Added!")
+                        download_btn(res,"signed.pdf"); open_in_new_tab(res)
             else:
-                col1, col2 = st.columns(2)
-                ocr_lang = col1.selectbox("Language", ["eng","hin","spa","fra","deu","ara","chi_sim"])
-                ocr_dpi  = col2.select_slider("DPI (higher = more accurate but slower)", [100,150,200,300], value=200)
+                simg=globals()['st'].file_uploader("Signature Image",
+                                                    type=["png","jpg","jpeg"],key="sig_img")
+                if simg:
+                    c1,c2,c3=globals()['st'].columns(3)
+                    sp2=c1.number_input("Page",1,tp6,tp6)
+                    sx2=c2.number_input("X",0,800,350); sy2=c3.number_input("Y",0,1200,700)
+                    c1,c2=globals()['st'].columns(2)
+                    sw2=c1.number_input("W",20,400,150); sh2=c2.number_input("H",10,200,60)
+                    globals()['st'].image(simg,width=160)
+                    if globals()['st'].button("✍ Add Image Sig",use_container_width=True):
+                        res=add_img_sig(pb6,simg.read(),sp2,sx2,sy2,sw2,sh2)
+                        globals()['st'].success("✅ Added!")
+                        download_btn(res,"signed.pdf"); open_in_new_tab(res)
 
-                if st.button("🔍 Run OCR", use_container_width=True):
-                    with st.spinner(f"Running OCR on {total_pages} page(s)... this may take a moment"):
+
+# ══════════════════════════════════
+# T7 — WATERMARK
+# ══════════════════════════════════
+with tabs[7]:
+    st.subheader("💧 Watermark Tools")
+    up7=st.file_uploader("📂 Upload PDF",type=["pdf"],key="wm_up")
+    if up7:
+        pb7=get_pdf_bytes(up7)
+        ok,msg,tp7=validate_pdf(pb7)
+        if not ok: st.error(f"❌ {msg}")
+        else:
+            wt=st.radio("Type",["Text","Image"],horizontal=True)
+            if wt=="Text":
+                c1,c2=st.columns(2)
+                wtxt=c1.text_input("Text","CONFIDENTIAL"); wcol=c2.color_picker("Color","#FF0000")
+                c1,c2,c3,c4=st.columns(4)
+                wsz=c1.number_input("Size",10,150,60); wang=c2.number_input("Angle",0,360,45)
+                wop=c3.slider("Opacity",0.01,0.99,0.15,0.01)
+                wpgs=c4.text_input("Pages","all")
+                if st.button("💧 Apply",use_container_width=True):
+                    with st.spinner("Applying..."):
+                        res=add_text_wm(pb7,wtxt,wop,wcol,wsz,wang,wpgs.strip() or "all")
+                    st.success("✅ Done!"); download_btn(res,"wm.pdf"); open_in_new_tab(res)
+            else:
+                wimg=st.file_uploader("Watermark Image",type=["png","jpg","jpeg"],key="wm_img")
+                if wimg:
+                    wop2=st.slider("Opacity",0.01,0.99,0.2,0.01)
+                    st.image(wimg,width=130)
+                    if st.button("💧 Apply",use_container_width=True):
+                        res=add_img_wm(pb7,wimg.read(),wop2)
+                        st.success("✅ Done!"); download_btn(res,"wm.pdf"); open_in_new_tab(res)
+
+
+# ══════════════════════════════════
+# T8 — OCR
+# ══════════════════════════════════
+with tabs[8]:
+    st.subheader("🔍 OCR Scanner")
+    if not check_ocr():
+        st.error("❌ pytesseract / pillow not installed.")
+        st.code("pip install pytesseract pillow")
+    else:
+        up8=st.file_uploader("📂 Upload PDF (scanned)",type=["pdf"],key="ocr_up")
+        if up8:
+            pb8=get_pdf_bytes(up8)
+            ok,msg,tp8=validate_pdf(pb8)
+            if not ok: st.error(f"❌ {msg}")
+            else:
+                c1,c2=st.columns(2)
+                olang=c1.selectbox("Language",["eng","hin","spa","fra","deu","ara","chi_sim"])
+                odpi=c2.select_slider("DPI",[100,150,200,300],value=200)
+                if st.button("🔍 Run OCR",use_container_width=True):
+                    with st.spinner(f"OCR on {tp8} pages..."):
                         try:
-                            progress = st.progress(0)
-                            results  = perform_ocr(pdf_bytes, ocr_lang, ocr_dpi)
-                            progress.progress(1.0)
-
-                            total_words = sum(r['word_count'] for r in results.values())
-                            avg_conf    = round(sum(r['confidence'] for r in results.values()) / len(results), 1)
-
-                            col1, col2, col3 = st.columns(3)
-                            col1.metric("Pages Processed", total_pages)
-                            col2.metric("Total Words",     total_words)
-                            col3.metric("Avg Confidence",  f"{avg_conf}%")
-
-                            full_text = "\n\n".join(
-                                f"=== Page {p} (Words: {r['word_count']}, Conf: {r['confidence']}%) ===\n{r['text']}"
-                                for p, r in results.items()
-                            )
-                            st.text_area("OCR Output", full_text, height=400)
-                            st.download_button("⬇ Download OCR Text", full_text.encode(),
-                                               "ocr_output.txt", "text/plain",
-                                               use_container_width=True)
-                        except Exception as e:
-                            st.error(f"❌ OCR failed: {e}")
+                            prog=st.progress(0)
+                            res=run_ocr(pb8,olang,odpi); prog.progress(1.0)
+                            tw=sum(r['word_count'] for r in res.values())
+                            ac=round(sum(r['confidence'] for r in res.values())/len(res),1)
+                            c1,c2,c3=st.columns(3)
+                            c1.metric("Pages",tp8); c2.metric("Words",tw)
+                            c3.metric("Avg Conf",f"{ac}%")
+                            full="\n\n".join(f"=== Page {p} ===\n{r['text']}"
+                                             for p,r in res.items())
+                            st.text_area("OCR Output",full,height=320)
+                            st.download_button("⬇ Download",full.encode(),
+                                               "ocr.txt","text/plain",use_container_width=True)
+                        except Exception as e: st.error(f"❌ {e}")
 
 
-# ─────────────────────────────────────────────────────────
+# ══════════════════════════════════
+# T9 — DONATE
+# ══════════════════════════════════
+with tabs[9]:
+    st.subheader("💙 Support Raghu's Work")
+    cl,cr=st.columns(2)
+    with cl:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#667eea18,#764ba218);
+                    border:1px solid #667eea44;border-radius:16px;
+                    padding:24px;text-align:center;'>
+            <div style='font-size:2.5em;'>🙏</div>
+            <h3 style='color:#667eea;margin:8px 0;'>Donate via UPI</h3>
+            <p style='color:#555;font-size:0.88em;margin-bottom:14px;'>
+                Kisi bhi UPI app se scan karo ya ID copy karo:
+            </p>
+            <div class='upi-chip'>{UPI_ID}</div>
+            <br/><br/>
+            <p style='color:#888;font-size:0.78em;'>
+                GPay · PhonePe · Paytm · BHIM · Any UPI App
+            </p>
+        </div>
+        """,unsafe_allow_html=True)
+
+    with cr:
+        qr_d=make_qr_b64(UPI_LINK)
+        if qr_d:
+            st.markdown(f"""
+            <div style='text-align:center;padding:10px;'>
+                <img src='data:image/png;base64,{qr_d}'
+                     style='width:220px;border-radius:14px;
+                            box-shadow:0 8px 24px rgba(102,126,234,0.25);
+                            border:3px solid #667eea44;'/>
+                <p style='color:#888;font-size:0.78em;margin-top:8px;'>
+                    📱 Phone se scan karo — direct UPI pe jayega
+                </p>
+            </div>""",unsafe_allow_html=True)
+        else:
+            enc_u=urllib.parse.quote(UPI_LINK)
+            st.markdown(f"""
+            <div style='text-align:center;padding:10px;'>
+                <img src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=667eea&data={enc_u}'
+                     style='width:220px;border-radius:14px;
+                            box-shadow:0 8px 24px rgba(102,126,234,0.25);'
+                     onerror="this.parentElement.innerHTML='<p>QR load nahi hua — ID copy karo</p>'"/>
+                <p style='color:#888;font-size:0.78em;margin-top:8px;'>📱 Phone se scan karo</p>
+            </div>""",unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style='text-align:center;margin-top:20px;padding:14px;
+                background:#f8f9fa;border-radius:12px;color:#888;font-size:0.83em;'>
+        💙 Donation optional hai — app free hai aur hamesha rahega<br>
+        Teri support se better features banane ki motivation milti hai! 🚀
+    </div>""",unsafe_allow_html=True)
+
+
+# ─────────────────────────────────
 # FOOTER
-# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────
 st.divider()
-st.markdown("""
-<div style='text-align:center; color:#888; font-size:0.85em; padding: 10px 0 20px;'>
-    🔵 <strong>Pro PDF Studio v2.0</strong> — Built by Raghu &nbsp;|&nbsp;
-    Powered by PyMuPDF · Streamlit · Tesseract OCR
+st.markdown(f"""
+<div style='text-align:center;color:#bbb;font-size:0.8em;padding:6px 0 16px;'>
+    🔵 <strong>Pro PDF Studio v3.0</strong> — Built with ❤️ by Raghu &nbsp;|&nbsp;
+    PyMuPDF · Streamlit · OCR &nbsp;|&nbsp;
+    <span style='color:#667eea;'>UPI: {UPI_ID}</span>
 </div>
-""", unsafe_allow_html=True)
+""",unsafe_allow_html=True)
