@@ -1010,7 +1010,57 @@ function st(msg){{var t=document.getElementById('t');t.textContent=msg;
                                 st.session_state.viewer_pdf_bytes=nb
                                 st.success(f"✅ Replaced {cnt}×!")
                                 download_btn(nb,"edited.pdf"); open_in_new_tab(nb)
-                                whatsapp_share()
+                                # Donation nudge after success
+                                st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif;}}
+body{{background:transparent;padding:3px 0;}}
+.bar{{background:linear-gradient(135deg,rgba(102,126,234,0.18),rgba(118,75,162,0.18));
+      border:1px solid rgba(102,126,234,0.35);border-radius:12px;
+      padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}}
+.txt{{color:#c7d2fe;font-size:0.8em;flex:1;min-width:160px;line-height:1.4;}}
+.txt strong{{color:#fde68a;}}
+.btns{{display:flex;gap:7px;flex-wrap:wrap;}}
+.btn{{border:none;border-radius:9px;padding:7px 13px;font-weight:700;
+      font-size:0.76em;cursor:pointer;transition:all 0.15s;
+      -webkit-tap-highlight-color:transparent;}}
+.btn-u{{background:linear-gradient(135deg,#667eea,#764ba2);color:white;
+        box-shadow:0 3px 10px rgba(102,126,234,0.4);}}
+.btn-u:hover{{transform:translateY(-1px);}}
+.btn-u:active{{transform:scale(0.96);}}
+.btn-c{{background:rgba(124,58,237,0.25);color:#c4b5fd;
+        border:1px solid rgba(124,58,237,0.35);}}
+.btn-c:hover{{background:rgba(124,58,237,0.4);color:white;}}
+.toast{{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+        background:rgba(0,0,0,0.85);color:#fff;padding:6px 16px;
+        border-radius:20px;font-size:0.76em;opacity:0;
+        transition:opacity 0.2s;pointer-events:none;z-index:9999;white-space:nowrap;}}
+.toast.show{{opacity:1;}}
+</style></head><body>
+<div class="bar">
+  <span style="font-size:1.3em;">🙏</span>
+  <div class="txt">
+    <strong>Helpful laga? Support Raghu!</strong> &nbsp;
+    Min <strong>₹10</strong> UPI &nbsp;·&nbsp; Crypto bhi accepted
+    <span style="opacity:0.6;font-size:0.9em;">&nbsp;(ETH/MATIC/USDT)</span>
+  </div>
+  <div class="btns">
+    <button class="btn btn-u" onclick="cp('{UPI_ID}','UPI ID copy ho gaya ✅')">💛 UPI: {UPI_ID}</button>
+    <button class="btn btn-c" onclick="cp('{CRYPTO_ADR_V}','Wallet copy ho gaya ✅')">🌍 Copy Crypto</button>
+  </div>
+</div>
+<div class="toast" id="t"></div>
+<script>
+function cp(txt,msg){{
+  if(navigator.clipboard){{navigator.clipboard.writeText(txt).then(function(){{sh(msg);}});}}
+  else{{var a=document.createElement('textarea');a.value=txt;
+        a.style.cssText='position:fixed;opacity:0;';document.body.appendChild(a);
+        a.focus();a.select();try{{document.execCommand('copy');sh(msg);}}catch(e){{}}
+        document.body.removeChild(a);}}
+}}
+function sh(m){{var t=document.getElementById('t');t.textContent=m;
+  t.classList.add('show');setTimeout(function(){{t.classList.remove('show');}},2100);}}
+</script></body></html>""", height=72)
                         except Exception as e: st.error(f"❌ {e}")
 
             if st.session_state.undo_stack:
