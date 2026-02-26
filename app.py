@@ -715,11 +715,133 @@ def render_page_preview(pdf_bytes: bytes, page_num: int = 0, dpi: int = 120) -> 
     return pix.tobytes("png")
 
 
+# ── DEEP PAGE INSPECTOR ───────────────────────────────────
+def inspect_page_full(pdf_bytes: bytes, page_num: int = 0) -> Dict:
+    """
+    Full deep inspection of a PDF page:
+    - All text spans with font, size, color, bold/italic flags
+    - All unique colors (text + drawings + fills)
+    - Page background color (if any)
+    - Drawing / shape colors
+    - Image count on page
+    Returns a rich dict with all data.
+    """
+    doc  = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page = doc[min(page_num, len(doc)-1)]
+
+    text_spans   = []   # full per-span data
+    all_colors   = {}   # hex_color -> count
+    fonts_used   = {}   # font_name -> {sizes, count}
+
+    # ── TEXT SPANS ──
+    blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+    for block in blocks:
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                raw_color = span.get("color", 0)
+
+                # color is packed int  RGB
+                r = (raw_color >> 16) & 0xFF
+                g = (raw_color >> 8)  & 0xFF
+                b =  raw_color        & 0xFF
+                hex_col = "#{:02x}{:02x}{:02x}".format(r, g, b)
+
+                # font flags
+                flags     = span.get("flags", 0)
+                is_bold   = bool(flags & 2**4)   # bit 4
+                is_italic = bool(flags & 2**1)   # bit 1
+                is_mono   = bool(flags & 2**3)   # bit 3
+
+                font_name = span.get("font", "Unknown")
+                font_size = round(span.get("size", 0), 2)
+                text_val  = span.get("text", "").strip()
+
+                if not text_val:
+                    continue
+
+                text_spans.append({
+                    "Text":        text_val[:80] + ("…" if len(text_val) > 80 else ""),
+                    "Font":        font_name,
+                    "Size":        font_size,
+                    "Color":       hex_col,
+                    "Bold":        "✅" if is_bold   else "—",
+                    "Italic":      "✅" if is_italic else "—",
+                    "Monospace":   "✅" if is_mono   else "—",
+                    "_raw_color":  raw_color,
+                    "_r": r, "_g": g, "_b": b,
+                })
+
+                # accumulate color usage count
+                all_colors[hex_col] = all_colors.get(hex_col, 0) + 1
+
+                # accumulate font usage
+                if font_name not in fonts_used:
+                    fonts_used[font_name] = {"sizes": set(), "count": 0,
+                                              "bold": False, "italic": False}
+                fonts_used[font_name]["sizes"].add(font_size)
+                fonts_used[font_name]["count"] += 1
+                if is_bold:   fonts_used[font_name]["bold"]   = True
+                if is_italic: fonts_used[font_name]["italic"] = True
+
+    # ── DRAWING COLORS (shapes, lines, fills) ──
+    drawing_colors = []
+    for draw in page.get_drawings():
+        for key in ("color", "fill"):
+            val = draw.get(key)
+            if val and isinstance(val, (list, tuple)) and len(val) >= 3:
+                r2 = int(val[0] * 255)
+                g2 = int(val[1] * 255)
+                b2 = int(val[2] * 255)
+                hx = "#{:02x}{:02x}{:02x}".format(r2, g2, b2)
+                drawing_colors.append({"Color": hx, "Type": key,
+                                        "Width": round(draw.get("width", 0), 2)})
+                all_colors[hx] = all_colors.get(hx, 0) + 1
+
+    # ── IMAGES COUNT ──
+    image_count = len(page.get_images(full=True))
+
+    # ── PAGE SIZE ──
+    rect = page.rect
+    page_info = {
+        "width":  round(rect.width, 1),
+        "height": round(rect.height, 1),
+        "rotation": page.rotation,
+    }
+
+    doc.close()
+
+    # sort fonts by usage
+    fonts_summary = []
+    for fname, fdata in sorted(fonts_used.items(), key=lambda x: -x[1]["count"]):
+        fonts_summary.append({
+            "Font Name":  fname,
+            "Used Count": fdata["count"],
+            "Sizes Used": ", ".join(str(s) for s in sorted(fdata["sizes"])),
+            "Bold":       "✅" if fdata["bold"]   else "—",
+            "Italic":     "✅" if fdata["italic"] else "—",
+        })
+
+    # sort colors by frequency
+    colors_sorted = sorted(all_colors.items(), key=lambda x: -x[1])
+
+    return {
+        "text_spans":      text_spans,
+        "fonts_summary":   fonts_summary,
+        "colors_sorted":   colors_sorted,       # list of (hex, count)
+        "drawing_colors":  drawing_colors,
+        "image_count":     image_count,
+        "page_info":       page_info,
+        "total_spans":     len(text_spans),
+    }
+
+
 # ═══════════════════════════════════════════════════════════
 # TABS
 # ═══════════════════════════════════════════════════════════
 TAB_NAMES = [
-    "📘 Viewer & Editor", "➕ Merge", "✂ Split", "🗜 Compress",
+    "📘 Viewer & Editor", "🎨 Page Inspector", "➕ Merge", "✂ Split", "🗜 Compress",
     "🖼 Extract Images", "📄 Extract Text", "📊 Tables",
     "📑 Reorder", "✍ Signature", "💧 Watermark", "🔍 OCR"
 ]
@@ -819,9 +941,172 @@ with tabs[0]:
 
 
 # ─────────────────────────────────────────────────────────
-# TAB 2 — MERGE
+# TAB 2 — PAGE INSPECTOR (Colors, Fonts, Text Data)
 # ─────────────────────────────────────────────────────────
 with tabs[1]:
+    st.subheader("🎨 Page Inspector — Colors, Fonts, Text Styles")
+    st.caption("Deep scan karo kisi bhi PDF page ka — har text span ka font, size, color, bold/italic flag sab dikhega.")
+
+    uploaded_ins = st.file_uploader("📂 Upload PDF", type=["pdf"], key="inspector_up")
+
+    if uploaded_ins:
+        ins_bytes = get_pdf_bytes(uploaded_ins)
+        ok, msg, total_pages = validate_pdf(ins_bytes)
+
+        if not ok:
+            st.error(f"❌ {msg}")
+        else:
+            st.success(f"✅ {msg}")
+
+            col_l, col_r = st.columns([1, 2])
+            with col_l:
+                ins_page = st.number_input("🔎 Select Page to Inspect", 1, total_pages, 1, key="ins_pg")
+
+            # Show page preview on right
+            with col_r:
+                png_prev = render_page_preview(ins_bytes, ins_page - 1, dpi=100)
+                st.image(png_prev, caption=f"Page {ins_page} Preview", use_container_width=True)
+
+            if st.button("🔍 Run Deep Inspection", use_container_width=True, key="run_inspect"):
+                with st.spinner("Scanning page..."):
+                    data = inspect_page_full(ins_bytes, ins_page - 1)
+
+                # ── PAGE INFO ──
+                pi = data["page_info"]
+                st.markdown("---")
+                st.markdown("### 📐 Page Info")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Width",       f"{pi['width']} pt")
+                c2.metric("Height",      f"{pi['height']} pt")
+                c3.metric("Rotation",    f"{pi['rotation']}°")
+                c4.metric("Images",      data["image_count"])
+
+                st.markdown(f"**Total text spans found:** `{data['total_spans']}`")
+
+                # ── COLOR PALETTE ──
+                st.markdown("---")
+                st.markdown("### 🎨 Color Palette Used on This Page")
+                if data["colors_sorted"]:
+                    # Show swatches in a row using HTML
+                    swatch_html = "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;'>"
+                    for hex_col, count in data["colors_sorted"]:
+                        # Determine text contrast (white or black label)
+                        r_val = int(hex_col[1:3], 16)
+                        g_val = int(hex_col[3:5], 16)
+                        b_val = int(hex_col[5:7], 16)
+                        lum   = 0.299*r_val + 0.587*g_val + 0.114*b_val
+                        txt_col = "#000" if lum > 128 else "#fff"
+                        swatch_html += f"""
+                        <div style='text-align:center; width:90px;'>
+                            <div style='background:{hex_col}; width:70px; height:70px;
+                                        border-radius:12px; border:2px solid #ddd;
+                                        margin:0 auto; box-shadow:0 3px 8px rgba(0,0,0,0.15);
+                                        display:flex; align-items:center; justify-content:center;'>
+                                <span style='color:{txt_col}; font-size:0.65em; font-weight:600;'>{hex_col}</span>
+                            </div>
+                            <div style='font-size:0.75em; color:#555; margin-top:4px;'>
+                                Used: <strong>{count}×</strong>
+                            </div>
+                        </div>"""
+                    swatch_html += "</div>"
+                    st.markdown(swatch_html, unsafe_allow_html=True)
+                else:
+                    st.info("No colors detected on this page.")
+
+                # Drawing colors separately
+                if data["drawing_colors"]:
+                    st.markdown("**🖊 Drawing / Shape Colors:**")
+                    st.dataframe(pd.DataFrame(data["drawing_colors"]), use_container_width=True, hide_index=True)
+
+                # ── FONTS SUMMARY ──
+                st.markdown("---")
+                st.markdown("### 🔤 Fonts Used on This Page")
+                if data["fonts_summary"]:
+                    df_fonts = pd.DataFrame(data["fonts_summary"])
+                    st.dataframe(df_fonts, use_container_width=True, hide_index=True)
+
+                    # Visual bar chart of font usage
+                    if len(df_fonts) > 1:
+                        st.markdown("**Font Usage Count:**")
+                        st.bar_chart(
+                            df_fonts.set_index("Font Name")["Used Count"],
+                            use_container_width=True,
+                            height=200
+                        )
+                else:
+                    st.info("No fonts detected on this page.")
+
+                # ── TEXT SPANS TABLE ──
+                st.markdown("---")
+                st.markdown("### 📝 All Text Spans — Font · Size · Color · Style")
+                if data["text_spans"]:
+                    df_spans = pd.DataFrame(data["text_spans"]).drop(
+                        columns=["_raw_color","_r","_g","_b"], errors="ignore"
+                    )
+
+                    # Add filter controls
+                    col_f1, col_f2, col_f3 = st.columns(3)
+                    filter_font  = col_f1.selectbox("Filter by Font",
+                                                     ["All"] + sorted(df_spans["Font"].unique().tolist()),
+                                                     key="filter_font")
+                    filter_bold  = col_f2.selectbox("Filter Bold",  ["All","✅","—"], key="filter_bold")
+                    filter_ital  = col_f3.selectbox("Filter Italic",["All","✅","—"], key="filter_ital")
+
+                    filtered = df_spans.copy()
+                    if filter_font != "All":
+                        filtered = filtered[filtered["Font"] == filter_font]
+                    if filter_bold != "All":
+                        filtered = filtered[filtered["Bold"] == filter_bold]
+                    if filter_ital != "All":
+                        filtered = filtered[filtered["Italic"] == filter_ital]
+
+                    st.caption(f"Showing {len(filtered)} of {len(df_spans)} spans")
+
+                    # Render with inline color swatch in Color column
+                    def color_cell(hex_col):
+                        return f'<span style="background:{hex_col};display:inline-block;' \
+                               f'width:14px;height:14px;border-radius:3px;' \
+                               f'border:1px solid #ccc;vertical-align:middle;margin-right:5px;"></span>{hex_col}'
+
+                    # Use st.dataframe with styling (no HTML here, Streamlit doesn't support it in dataframe)
+                    st.dataframe(
+                        filtered,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Text":  st.column_config.TextColumn("📝 Text",       width="large"),
+                            "Font":  st.column_config.TextColumn("🔤 Font",       width="medium"),
+                            "Size":  st.column_config.NumberColumn("📏 Size",     width="small",  format="%.1f pt"),
+                            "Color": st.column_config.TextColumn("🎨 Color (hex)",width="small"),
+                            "Bold":  st.column_config.TextColumn("B",             width="small"),
+                            "Italic":st.column_config.TextColumn("I",             width="small"),
+                            "Monospace": st.column_config.TextColumn("Mono",      width="small"),
+                        }
+                    )
+
+                    # Download as CSV / Excel
+                    col_dl1, col_dl2 = st.columns(2)
+                    with col_dl1:
+                        csv = filtered.to_csv(index=False).encode()
+                        st.download_button("⬇ Download as CSV", csv,
+                                           f"page{ins_page}_text_data.csv", "text/csv",
+                                           use_container_width=True)
+                    with col_dl2:
+                        xl_buf = io.BytesIO()
+                        with pd.ExcelWriter(xl_buf, engine="xlsxwriter") as w:
+                            filtered.to_excel(w, sheet_name=f"Page{ins_page}", index=False)
+                        st.download_button("⬇ Download as Excel", xl_buf.getvalue(),
+                                           f"page{ins_page}_text_data.xlsx",
+                                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           use_container_width=True)
+                else:
+                    st.info("No text found on this page.")
+
+
+# ─────────────────────────────────────────────────────────
+# TAB 3 — MERGE
+# ─────────────────────────────────────────────────────────
+with tabs[2]:
     st.subheader("➕ Merge Multiple PDFs")
     st.caption("Upload 2 or more PDFs — they will be merged in upload order.")
 
@@ -855,7 +1140,7 @@ with tabs[1]:
 # ─────────────────────────────────────────────────────────
 # TAB 3 — SPLIT
 # ─────────────────────────────────────────────────────────
-with tabs[2]:
+with tabs[3]:
     st.subheader("✂ Split PDF")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="split_up")
@@ -915,7 +1200,7 @@ with tabs[2]:
 # ─────────────────────────────────────────────────────────
 # TAB 4 — COMPRESS
 # ─────────────────────────────────────────────────────────
-with tabs[3]:
+with tabs[4]:
     st.subheader("🗜 Compress PDF")
     st.caption("Reduces file size by re-compressing images and cleaning the PDF structure.")
 
@@ -955,7 +1240,7 @@ with tabs[3]:
 # ─────────────────────────────────────────────────────────
 # TAB 5 — EXTRACT IMAGES
 # ─────────────────────────────────────────────────────────
-with tabs[4]:
+with tabs[5]:
     st.subheader("🖼 Extract Images from PDF")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="img_up")
@@ -999,7 +1284,7 @@ with tabs[4]:
 # ─────────────────────────────────────────────────────────
 # TAB 6 — EXTRACT TEXT
 # ─────────────────────────────────────────────────────────
-with tabs[5]:
+with tabs[6]:
     st.subheader("📄 Extract Text from PDF")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="text_up")
@@ -1043,7 +1328,7 @@ with tabs[5]:
 # ─────────────────────────────────────────────────────────
 # TAB 7 — EXTRACT TABLES
 # ─────────────────────────────────────────────────────────
-with tabs[6]:
+with tabs[7]:
     st.subheader("📊 Extract Tables from PDF")
     st.caption("Uses PyMuPDF's built-in table detection (works best on text-based PDFs with clear borders).")
 
@@ -1084,7 +1369,7 @@ with tabs[6]:
 # ─────────────────────────────────────────────────────────
 # TAB 8 — REORDER PAGES
 # ─────────────────────────────────────────────────────────
-with tabs[7]:
+with tabs[8]:
     st.subheader("📑 Reorder PDF Pages")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="reorder_up")
@@ -1128,7 +1413,7 @@ with tabs[7]:
 # ─────────────────────────────────────────────────────────
 # TAB 9 — SIGNATURE
 # ─────────────────────────────────────────────────────────
-with tabs[8]:
+with tabs[9]:
     st.subheader("✍ Add Signature to PDF")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="sig_up")
@@ -1186,7 +1471,7 @@ with tabs[8]:
 # ─────────────────────────────────────────────────────────
 # TAB 10 — WATERMARK
 # ─────────────────────────────────────────────────────────
-with tabs[9]:
+with tabs[10]:
     st.subheader("💧 Watermark Tools")
 
     uploaded = st.file_uploader("📂 Upload PDF", type=["pdf"], key="wm_up")
@@ -1235,7 +1520,7 @@ with tabs[9]:
 # ─────────────────────────────────────────────────────────
 # TAB 11 — OCR
 # ─────────────────────────────────────────────────────────
-with tabs[10]:
+with tabs[11]:
     st.subheader("🔍 OCR Scanner")
     st.caption("Extract text from scanned / image-based PDFs using Tesseract OCR.")
 
