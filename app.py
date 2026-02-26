@@ -146,35 +146,140 @@ def make_qr_b64(data_str: str) -> str:
         return ""
 
 if not st.session_state.donation_shown:
-    qr_b64 = make_qr_b64(UPI_LINK)
-    enc_upi = urllib.parse.quote(UPI_LINK)
+    qr_b64     = make_qr_b64(UPI_LINK)
+    enc_upi    = urllib.parse.quote(UPI_LINK)
+    CRYPTO_ADR = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
+
     if qr_b64:
-        qr_tag = f'<img src="data:image/png;base64,{qr_b64}" width="185" style="border-radius:10px;margin:8px auto;display:block;border:2px solid #667eea44;"/>'
+        qr_tag = f'<img src="data:image/png;base64,{qr_b64}" width="180" style="border-radius:10px;display:block;margin:8px auto;border:2px solid #667eea55;"/>'
     else:
-        qr_tag = (f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=185x185'
-                  f'&color=667eea&data={enc_upi}" width="185" '
-                  f'style="border-radius:10px;margin:8px auto;display:block;" '
+        qr_tag = (f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180'
+                  f'&color=667eea&data={enc_upi}" width="180" '
+                  f'style="border-radius:10px;display:block;margin:8px auto;" '
                   f'onerror="this.style.display=\'none\'"/>')
 
-    st.markdown(f"""
-    <div class="don-overlay" id="donOverlay">
-      <div class="don-box">
-        <div style="font-size:2.2em;margin-bottom:4px;">🙏</div>
-        <h2>Support Raghu's Work!</h2>
-        <p>Yeh tool free hai — agar helpful laga toh ek chhoti si<br>chai ki kimat donate karo! ☕</p>
-        {qr_tag}
-        <p style="margin:4px 0 2px;font-size:0.8em;color:#888;">Scan karo ya UPI ID pe bhejo:</p>
-        <div class="upi-chip">{UPI_ID}</div><br/>
-        <button class="don-close"
-          onclick="document.getElementById('donOverlay').style.display='none'">
-          ✅ Thanks! Ab App Use Karo
-        </button>
-        <p style="font-size:0.72em;color:#bbb;margin-top:10px;">
-          Donation optional hai — app bilkul free hai 💙
-        </p>
-      </div>
+    # ── Use components.v1.html so buttons are actually clickable ──
+    st.components.v1.html(f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}}
+  body{{background:rgba(0,0,0,0.72);display:flex;align-items:center;
+        justify-content:center;min-height:100vh;padding:12px;}}
+  .box{{background:#fff;border-radius:20px;padding:24px 20px;
+        max-width:400px;width:100%;text-align:center;
+        box-shadow:0 20px 60px rgba(0,0,0,0.35);}}
+  h2{{color:#667eea;font-size:1.3em;margin-bottom:4px;}}
+  .sub{{color:#555;font-size:0.85em;margin-bottom:4px;line-height:1.5;}}
+  .min-note{{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;
+             padding:6px 12px;font-size:0.8em;color:#856404;
+             margin-bottom:10px;font-weight:600;}}
+  .section-title{{font-size:0.78em;color:#888;margin:10px 0 4px;font-weight:600;
+                  text-transform:uppercase;letter-spacing:0.5px;}}
+  .upi-row{{display:flex;align-items:center;justify-content:center;gap:8px;
+            background:#f0f2f6;border:2px dashed #667eea;border-radius:10px;
+            padding:8px 12px;margin:4px 0 8px;}}
+  .upi-id{{font-family:monospace;font-size:1em;font-weight:700;color:#667eea;}}
+  .copy-btn{{background:#667eea;color:white;border:none;border-radius:6px;
+             padding:5px 10px;font-size:0.78em;font-weight:600;cursor:pointer;
+             flex-shrink:0;transition:all 0.2s;}}
+  .copy-btn:hover{{background:#764ba2;}}
+  .copy-btn:active{{transform:scale(0.95);}}
+  .crypto-box{{background:#1a1a2e;border-radius:10px;padding:10px 12px;
+               margin:4px 0 8px;word-break:break-all;}}
+  .crypto-addr{{font-family:monospace;font-size:0.75em;color:#a78bfa;font-weight:600;}}
+  .crypto-row{{display:flex;align-items:center;justify-content:space-between;gap:6px;}}
+  .copy-btn2{{background:#7c3aed;color:white;border:none;border-radius:6px;
+              padding:5px 10px;font-size:0.75em;font-weight:600;cursor:pointer;
+              flex-shrink:0;transition:all 0.2s;}}
+  .copy-btn2:hover{{background:#5b21b6;}}
+  .chains{{font-size:0.72em;color:#888;margin-top:4px;}}
+  .close-btn{{width:100%;background:linear-gradient(135deg,#667eea,#764ba2);
+              color:white;border:none;border-radius:12px;
+              padding:13px;font-size:1em;font-weight:700;cursor:pointer;
+              margin-top:12px;transition:all 0.2s;
+              -webkit-tap-highlight-color:transparent;}}
+  .close-btn:hover{{opacity:0.92;transform:translateY(-1px);}}
+  .close-btn:active{{transform:scale(0.98);opacity:1;}}
+  .footer-note{{font-size:0.72em;color:#bbb;margin-top:8px;}}
+  .toast{{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+          background:#333;color:white;padding:8px 18px;border-radius:20px;
+          font-size:0.82em;opacity:0;transition:opacity 0.3s;pointer-events:none;
+          white-space:nowrap;z-index:999;}}
+  .toast.show{{opacity:1;}}
+</style>
+</head>
+<body>
+<div class="box" id="donBox">
+  <div style="font-size:2em;margin-bottom:4px;">🙏</div>
+  <h2>Support Raghu's Work!</h2>
+  <p class="sub">Yeh tool free hai — agar helpful laga toh<br>ek chhoti si chai ki kimat donate karo! ☕</p>
+  <div class="min-note">💛 Minimum donation: sirf ₹10</div>
+
+  <!-- UPI Section -->
+  <div class="section-title">🇮🇳 UPI / Indian Payment</div>
+  {qr_tag}
+  <p style="font-size:0.75em;color:#888;margin:4px 0 2px;">Scan karo ya ID copy karke kisi bhi UPI app mein bhejo</p>
+  <div class="upi-row">
+    <span class="upi-id" id="upiId">{UPI_ID}</span>
+    <button class="copy-btn" onclick="copyText('{UPI_ID}','UPI ID copy ho gaya! ✅')">Copy</button>
+  </div>
+  <p style="font-size:0.72em;color:#aaa;margin-bottom:8px;">GPay · PhonePe · Paytm · BHIM — koi bhi UPI app chalega</p>
+
+  <!-- Crypto Section -->
+  <div class="section-title">🌍 Crypto / International Donation</div>
+  <p style="font-size:0.75em;color:#888;margin:2px 0 4px;">
+    EVM Wallet Address (ETH / MATIC / BNB / USDT — koi bhi EVM chain pe bhej sakte ho)
+  </p>
+  <div class="crypto-box">
+    <div class="crypto-row">
+      <span class="crypto-addr" id="cryptoAddr">{CRYPTO_ADR}</span>
+      <button class="copy-btn2" onclick="copyText('{CRYPTO_ADR}','Wallet address copy ho gaya! ✅')">Copy</button>
     </div>
-    """, unsafe_allow_html=True)
+  </div>
+  <p class="chains">✅ Supported chains: Ethereum · Polygon · BSC · Arbitrum · Optimism · Base<br>
+  Supported tokens: ETH · MATIC · BNB · USDT · USDC · any ERC-20</p>
+
+  <button class="close-btn" id="closeBtn" onclick="closeDonation()">
+    ✅ Thanks! Ab App Use Karo
+  </button>
+  <p class="footer-note">Donation optional hai — app hamesha free rahega 💙</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  function copyText(txt, msg) {{
+    if (navigator.clipboard && navigator.clipboard.writeText) {{
+      navigator.clipboard.writeText(txt).then(function() {{ showToast(msg); }});
+    }} else {{
+      var ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try {{ document.execCommand('copy'); showToast(msg); }} catch(e) {{}}
+      document.body.removeChild(ta);
+    }}
+  }}
+  function showToast(msg) {{
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){{ t.classList.remove('show'); }}, 2200);
+  }}
+  function closeDonation() {{
+    document.getElementById('donBox').style.display = 'none';
+    document.body.style.background = 'transparent';
+    // notify parent to collapse iframe
+    try {{ window.parent.postMessage('donationClosed','*'); }} catch(e){{}}
+  }}
+  // Also close on background tap
+  document.body.addEventListener('click', function(e) {{
+    if (e.target === document.body) closeDonation();
+  }});
+</script>
+</body>
+</html>
+""", height=680, scrolling=False)
     st.session_state.donation_shown = True
 
 # ─────────────────────────────────────────────
@@ -1000,55 +1105,139 @@ with tabs[8]:
 # ══════════════════════════════════
 with tabs[9]:
     st.subheader("💙 Support Raghu's Work")
-    cl,cr=st.columns(2)
-    with cl:
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg,#667eea18,#764ba218);
-                    border:1px solid #667eea44;border-radius:16px;
-                    padding:24px;text-align:center;'>
-            <div style='font-size:2.5em;'>🙏</div>
-            <h3 style='color:#667eea;margin:8px 0;'>Donate via UPI</h3>
-            <p style='color:#555;font-size:0.88em;margin-bottom:14px;'>
-                Kisi bhi UPI app se scan karo ya ID copy karo:
-            </p>
-            <div class='upi-chip'>{UPI_ID}</div>
-            <br/><br/>
-            <p style='color:#888;font-size:0.78em;'>
-                GPay · PhonePe · Paytm · BHIM · Any UPI App
-            </p>
-        </div>
-        """,unsafe_allow_html=True)
+    CRYPTO_ADR = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
+    qr_d = make_qr_b64(UPI_LINK)
+    enc_u = urllib.parse.quote(UPI_LINK)
+    if qr_d:
+        qr_img = f'<img src="data:image/png;base64,{qr_d}" style="width:200px;border-radius:12px;display:block;margin:8px auto;border:3px solid #667eea44;box-shadow:0 8px 24px rgba(102,126,234,0.2);"/>'
+    else:
+        qr_img = f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=667eea&data={enc_u}" style="width:200px;border-radius:12px;display:block;margin:8px auto;" onerror="this.style.display=\'none\'"/>'
 
-    with cr:
-        qr_d=make_qr_b64(UPI_LINK)
-        if qr_d:
-            st.markdown(f"""
-            <div style='text-align:center;padding:10px;'>
-                <img src='data:image/png;base64,{qr_d}'
-                     style='width:220px;border-radius:14px;
-                            box-shadow:0 8px 24px rgba(102,126,234,0.25);
-                            border:3px solid #667eea44;'/>
-                <p style='color:#888;font-size:0.78em;margin-top:8px;'>
-                    📱 Phone se scan karo — direct UPI pe jayega
-                </p>
-            </div>""",unsafe_allow_html=True)
-        else:
-            enc_u=urllib.parse.quote(UPI_LINK)
-            st.markdown(f"""
-            <div style='text-align:center;padding:10px;'>
-                <img src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=667eea&data={enc_u}'
-                     style='width:220px;border-radius:14px;
-                            box-shadow:0 8px 24px rgba(102,126,234,0.25);'
-                     onerror="this.parentElement.innerHTML='<p>QR load nahi hua — ID copy karo</p>'"/>
-                <p style='color:#888;font-size:0.78em;margin-top:8px;'>📱 Phone se scan karo</p>
-            </div>""",unsafe_allow_html=True)
+    st.components.v1.html(f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',system-ui,sans-serif;}}
+body{{background:#f8f9fa;padding:16px;}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:800px;margin:0 auto;}}
+@media(max-width:600px){{.grid{{grid-template-columns:1fr;}}}}
+.card{{background:#fff;border-radius:16px;padding:20px;
+       box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;}}
+.card h3{{font-size:1.05em;margin-bottom:8px;}}
+.upi-card h3{{color:#667eea;}}
+.crypto-card h3{{color:#7c3aed;}}
+.min-badge{{background:#fff3cd;border:1px solid #ffc107;border-radius:20px;
+            padding:4px 12px;font-size:0.75em;color:#856404;font-weight:700;
+            display:inline-block;margin-bottom:10px;}}
+.label{{font-size:0.72em;color:#888;font-weight:600;text-transform:uppercase;
+        letter-spacing:0.5px;margin:8px 0 4px;}}
+.copy-row{{display:flex;align-items:center;gap:6px;
+           background:#f0f2f6;border:2px dashed #667eea;
+           border-radius:10px;padding:8px 10px;}}
+.copy-row2{{display:flex;align-items:center;gap:6px;
+            background:#1a1a2e;border-radius:10px;padding:8px 10px;}}
+.upi-txt{{font-family:monospace;font-size:0.95em;font-weight:700;
+          color:#667eea;flex:1;text-align:left;}}
+.crypto-txt{{font-family:monospace;font-size:0.7em;font-weight:600;
+             color:#a78bfa;flex:1;text-align:left;word-break:break-all;}}
+.cbtn{{border:none;border-radius:8px;padding:6px 12px;font-weight:700;
+       font-size:0.78em;cursor:pointer;flex-shrink:0;transition:all 0.18s;
+       -webkit-tap-highlight-color:transparent;}}
+.cbtn-upi{{background:#667eea;color:#fff;}}
+.cbtn-upi:active{{background:#4f46e5;transform:scale(0.95);}}
+.cbtn-crypto{{background:#7c3aed;color:#fff;}}
+.cbtn-crypto:active{{background:#5b21b6;transform:scale(0.95);}}
+.apps{{font-size:0.72em;color:#aaa;margin-top:6px;}}
+.chains{{font-size:0.7em;color:#7c3aed;margin-top:5px;line-height:1.6;}}
+.footer{{text-align:center;margin-top:16px;padding:12px;
+         background:#fff;border-radius:12px;
+         font-size:0.8em;color:#888;max-width:800px;margin:16px auto 0;}}
+.toast{{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+        background:rgba(0,0,0,0.8);color:#fff;padding:8px 20px;
+        border-radius:20px;font-size:0.82em;opacity:0;
+        transition:opacity 0.25s;pointer-events:none;white-space:nowrap;}}
+.toast.show{{opacity:1;}}
+</style>
+</head>
+<body>
+<div class="grid">
 
-    st.markdown("""
-    <div style='text-align:center;margin-top:20px;padding:14px;
-                background:#f8f9fa;border-radius:12px;color:#888;font-size:0.83em;'>
-        💙 Donation optional hai — app free hai aur hamesha rahega<br>
-        Teri support se better features banane ki motivation milti hai! 🚀
-    </div>""",unsafe_allow_html=True)
+  <!-- UPI Card -->
+  <div class="card upi-card">
+    <div style="font-size:1.8em;">🇮🇳</div>
+    <h3>UPI / Indian Payment</h3>
+    <div class="min-badge">💛 Minimum: ₹10 only</div>
+    {qr_img}
+    <p style="font-size:0.75em;color:#888;margin-bottom:6px;">
+      Scan karo ya UPI ID copy karke kisi bhi app mein bhejo
+    </p>
+    <div class="label">UPI ID</div>
+    <div class="copy-row">
+      <span class="upi-txt">{UPI_ID}</span>
+      <button class="cbtn cbtn-upi"
+        onclick="copyTxt('{UPI_ID}','UPI ID copy ho gaya ✅')">Copy</button>
+    </div>
+    <p class="apps">GPay · PhonePe · Paytm · BHIM · Any UPI App</p>
+  </div>
+
+  <!-- Crypto Card -->
+  <div class="card crypto-card">
+    <div style="font-size:1.8em;">🌍</div>
+    <h3>Crypto / International</h3>
+    <div class="min-badge" style="background:#f3e8ff;border-color:#a78bfa;color:#5b21b6;">
+      💜 Any amount welcome
+    </div>
+    <p style="font-size:0.78em;color:#555;margin:6px 0 8px;line-height:1.5;">
+      Kisi bhi EVM-compatible chain pe send kar sakte ho.<br>
+      ETH, MATIC, BNB, USDT, USDC — sab accept hai!
+    </p>
+    <div class="label" style="color:#7c3aed;">EVM Wallet Address</div>
+    <div class="copy-row2">
+      <span class="crypto-txt" id="cryptoAddr">{CRYPTO_ADR}</span>
+      <button class="cbtn cbtn-crypto"
+        onclick="copyTxt('{CRYPTO_ADR}','Wallet address copy ho gaya ✅')">Copy</button>
+    </div>
+    <p class="chains">
+      ✅ <strong>Chains:</strong> Ethereum · Polygon · BSC · Arbitrum · Optimism · Base<br>
+      ✅ <strong>Tokens:</strong> ETH · MATIC · BNB · USDT · USDC · any ERC-20
+    </p>
+    <p style="font-size:0.7em;color:#aaa;margin-top:8px;">
+      MetaMask · Trust Wallet · Coinbase Wallet — koi bhi chalega
+    </p>
+  </div>
+
+</div>
+
+<div class="footer">
+  💙 Donation optional hai — app free hai aur hamesha rahega<br>
+  Teri support se aur better features banane ki motivation milti hai! 🚀
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function copyTxt(txt, msg) {{
+  if (navigator.clipboard && navigator.clipboard.writeText) {{
+    navigator.clipboard.writeText(txt).then(function(){{ showToast(msg); }});
+  }} else {{
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try {{ document.execCommand('copy'); showToast(msg); }} catch(e) {{}}
+    document.body.removeChild(ta);
+  }}
+}}
+function showToast(msg) {{
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){{ t.classList.remove('show'); }}, 2200);
+}}
+</script>
+</body>
+</html>
+""", height=620, scrolling=True)
 
 
 # ─────────────────────────────────
