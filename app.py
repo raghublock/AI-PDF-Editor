@@ -359,12 +359,44 @@ st.markdown("""
 .stCheckbox label, .stRadio label,
 .stFileUploader label { color: #c0c0e0 !important; }
 
-/* Selectbox */
-.stSelectbox div[data-baseweb="select"] > div {
+/* Selectbox — fix white dropdown bg */
+.stSelectbox div[data-baseweb="select"] > div,
+.stSelectbox div[data-baseweb="select"] > div:hover,
+.stSelectbox [data-baseweb="popover"],
+.stSelectbox [role="listbox"],
+.stSelectbox [role="option"],
+[data-baseweb="popover"],
+[data-baseweb="menu"],
+[role="listbox"],
+[role="option"] {
+    background: #1e1b4b !important;
+    background-color: #1e1b4b !important;
+    border-color: rgba(102,126,234,0.5) !important;
+    color: #e0e0ff !important;
+}
+[role="option"]:hover,
+[data-baseweb="option"]:hover {
+    background: rgba(102,126,234,0.3) !important;
+}
+/* Force all select inputs dark */
+.stSelectbox svg { color: #a0a0cc !important; }
+.stSelectbox [data-testid="stMarkdownContainer"] { color: #e0e0ff !important; }
+/* Number input */
+.stNumberInput [data-baseweb="input"] {
     background: rgba(255,255,255,0.07) !important;
+    border-color: rgba(102,126,234,0.4) !important;
+}
+.stNumberInput button {
+    background: rgba(102,126,234,0.25) !important;
     border-color: rgba(102,126,234,0.4) !important;
     color: #e0e0ff !important;
 }
+/* Color picker */
+.stColorPicker > div { border-color: rgba(102,126,234,0.3) !important; }
+/* Radio */
+.stRadio > div { color: #c0c0dd !important; }
+/* Checkbox */
+.stCheckbox > label > div:first-child { border-color: rgba(102,126,234,0.5) !important; }
 
 /* Metrics */
 [data-testid="metric-container"] {
@@ -600,16 +632,33 @@ def download_btn(pb:bytes, fn:str="output.pdf", lbl:str=None):
 
 def open_in_new_tab(pb:bytes, lbl:str="🔓 Open in Browser"):
     b64=base64.b64encode(pb).decode()
-    st.components.v1.html(f"""
-    <script>(function(){{
-        const b=atob("{b64}"),a=new Uint8Array(b.length);
-        for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);
-        const u=URL.createObjectURL(new Blob([a],{{type:'application/pdf'}}));
-        window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),500);
-    }})();</script>
-    <button onclick="void(0)" style="background:linear-gradient(135deg,#28a745,#20c997);
-        color:white;padding:11px;border:none;border-radius:10px;font-weight:600;
-        cursor:pointer;width:100%;font-size:0.93em;">{lbl}</button>""",height=68)
+    st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{background:transparent;padding:4px 0;}}
+button{{width:100%;padding:12px;border:none;border-radius:10px;
+  background:linear-gradient(135deg,#28a745,#20c997);color:white;
+  font-weight:700;font-size:0.95em;cursor:pointer;letter-spacing:0.2px;
+  font-family:system-ui,sans-serif;
+  box-shadow:0 4px 14px rgba(40,167,69,0.4);transition:all 0.18s;
+  -webkit-tap-highlight-color:transparent;}}
+button:hover{{transform:translateY(-1px);box-shadow:0 8px 22px rgba(40,167,69,0.5);}}
+button:active{{transform:scale(0.97);opacity:0.9;}}
+</style></head><body>
+<button onclick="openPDF()">{lbl}</button>
+<script>
+var DATA="{b64}";
+function openPDF(){{
+  var arr=new Uint8Array(atob(DATA).split('').map(function(c){{return c.charCodeAt(0);}}));
+  var blob=new Blob([arr],{{type:'application/pdf'}});
+  var url=URL.createObjectURL(blob);
+  var w=null;
+  try{{w=window.parent.open(url,'_blank');}}catch(e){{}}
+  if(!w||w.closed)try{{w=window.top.open(url,'_blank');}}catch(e){{}}
+  if(!w||w.closed)w=window.open(url,'_blank');
+  setTimeout(function(){{URL.revokeObjectURL(url);}},4000);
+}}
+</script></body></html>""", height=56)
 
 def whatsapp_share(msg="Raghu ke Pro PDF Studio se PDF edit ki! 🚀"):
     enc=urllib.parse.quote(msg)
@@ -968,15 +1017,15 @@ with tabs[1]:
                                  })
                 else: st.info("No fonts.")
 
-                # Mobile cards
+                # ── Beautiful Interactive Table (replaces cards) ──
                 st.markdown("---")
-                st.markdown("### 📝 Text Spans — Mobile Card View")
+                st.markdown("### 📋 Text Spans — Interactive Table")
                 if idata["spans"]:
                     af=sorted(set(s["font"] for s in idata["spans"]))
                     fc1,fc2,fc3=st.columns(3)
-                    ff=fc1.selectbox("Font",["All"]+af,key="iff")
-                    fb=fc2.selectbox("Bold",["All","✅ Bold","— Normal"],key="ifb")
-                    fi=fc3.selectbox("Italic",["All","✅ Italic","— Normal"],key="ifi")
+                    ff=fc1.selectbox("🔤 Filter Font",["All"]+af,key="iff")
+                    fb=fc2.selectbox("B Filter Bold",["All","✅ Bold","— Normal"],key="ifb")
+                    fi=fc3.selectbox("I Filter Italic",["All","✅ Italic","— Normal"],key="ifi")
 
                     fspans=idata["spans"]
                     if ff!="All": fspans=[s for s in fspans if s["font"]==ff]
@@ -985,34 +1034,205 @@ with tabs[1]:
                     if fi=="✅ Italic":   fspans=[s for s in fspans if s["italic"]]
                     elif fi=="— Normal": fspans=[s for s in fspans if not s["italic"]]
 
-                    st.caption(f"Showing {len(fspans)} of {len(idata['spans'])} spans")
+                    st.caption(f"Showing {min(len(fspans),200)} of {len(idata['spans'])} spans")
 
-                    cards=""
-                    for sp in fspans[:80]:
-                        td=sp["text"][:90]+("…" if len(sp["text"])>90 else "")
-                        lum2=0.299*sp["r"]+0.587*sp["g"]+0.114*sp["b"]
-                        chips=(f"<span class='sc-chip'>🔤 {sp['font'][:20]}</span>"
-                               f"<span class='sc-chip'>📏 {sp['size']} pt</span>"
-                               f"<span class='sc-chip' style='background:{sp['color']};"
-                               f"color:{'#000' if lum2>128 else '#fff'};border-color:{sp['color']};'>"
-                               f"● {sp['color']}</span>")
-                        if sp["bold"]:   chips+="<span class='sc-chip bold'>B Bold</span>"
-                        if sp["italic"]: chips+="<span class='sc-chip italic'>I Italic</span>"
-                        if sp["mono"]:   chips+="<span class='sc-chip mono'>⌨ Mono</span>"
-                        cards+=f"<div class='span-card'><div class='sc-text'>\"{td}\"</div><div class='sc-meta'>{chips}</div></div>"
+                    # Build rows JSON for the HTML table
+                    import json as _json
+                    rows_data = []
+                    for sp in fspans[:200]:
+                        lum=0.299*sp["r"]+0.587*sp["g"]+0.114*sp["b"]
+                        tc="#000" if lum>128 else "#fff"
+                        rows_data.append({
+                            "text": sp["text"][:120],
+                            "font": sp["font"],
+                            "size": sp["size"],
+                            "color": sp["color"],
+                            "color_tc": tc,
+                            "bold": sp["bold"],
+                            "italic": sp["italic"],
+                            "mono": sp["mono"],
+                        })
+                    rows_json = _json.dumps(rows_data)
 
-                    if len(fspans)>80:
-                        cards+=f"<p style='color:#999;text-align:center;font-size:0.78em;'>...aur {len(fspans)-80} spans — CSV download karo</p>"
+                    st.components.v1.html(f"""<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',system-ui,sans-serif;}}
+body{{background:transparent;padding:0;}}
+.tbl-wrap{{
+  border-radius:14px;overflow:hidden;
+  border:1px solid rgba(102,126,234,0.3);
+  box-shadow:0 8px 32px rgba(0,0,0,0.3);
+}}
+.tbl-header{{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;
+  background:linear-gradient(135deg,rgba(102,126,234,0.9),rgba(118,75,162,0.9));
+}}
+.tbl-header span{{color:white;font-weight:700;font-size:0.9em;}}
+.copy-all-btn{{
+  background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.3);
+  border-radius:8px;padding:5px 12px;font-size:0.76em;font-weight:600;cursor:pointer;
+  transition:all 0.15s;-webkit-tap-highlight-color:transparent;
+}}
+.copy-all-btn:hover{{background:rgba(255,255,255,0.3);}}
+.copy-all-btn:active{{transform:scale(0.95);}}
+table{{width:100%;border-collapse:collapse;}}
+thead tr{{background:rgba(30,27,75,0.95);}}
+thead th{{
+  padding:10px 12px;text-align:left;font-size:0.75em;font-weight:700;
+  color:#a78bfa;text-transform:uppercase;letter-spacing:0.6px;
+  border-bottom:1px solid rgba(102,126,234,0.3);white-space:nowrap;
+}}
+tbody tr{{
+  background:rgba(15,12,41,0.8);
+  border-bottom:1px solid rgba(102,126,234,0.1);
+  transition:background 0.12s;
+}}
+tbody tr:hover{{background:rgba(102,126,234,0.12);}}
+tbody tr:nth-child(even){{background:rgba(30,27,75,0.6);}}
+tbody tr:nth-child(even):hover{{background:rgba(102,126,234,0.14);}}
+td{{padding:9px 12px;font-size:0.8em;vertical-align:middle;}}
+.td-text{{
+  color:#f0f0ff;font-weight:500;max-width:320px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  cursor:default;
+}}
+.td-text:hover{{white-space:normal;word-break:break-word;}}
+.td-font{{color:#c0b0ff;font-size:0.78em;white-space:nowrap;}}
+.td-size{{color:#80deea;font-weight:600;text-align:center;white-space:nowrap;}}
+.color-pill{{
+  display:inline-flex;align-items:center;gap:5px;
+  border-radius:20px;padding:3px 8px;font-size:0.75em;font-weight:700;
+  font-family:monospace;white-space:nowrap;
+}}
+.color-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,0.2);}}
+.badge{{
+  display:inline-block;border-radius:20px;padding:2px 8px;
+  font-size:0.7em;font-weight:700;white-space:nowrap;
+}}
+.badge-bold{{background:rgba(255,193,7,0.2);color:#ffd54f;border:1px solid rgba(255,193,7,0.3);}}
+.badge-italic{{background:rgba(13,202,240,0.15);color:#80deea;border:1px solid rgba(13,202,240,0.25);}}
+.badge-mono{{background:rgba(102,126,234,0.25);color:#9fa8da;border:1px solid rgba(102,126,234,0.35);}}
+.td-badges{{display:flex;gap:4px;flex-wrap:wrap;}}
+.copy-row-btn{{
+  background:rgba(102,126,234,0.2);color:#a78bfa;border:1px solid rgba(102,126,234,0.3);
+  border-radius:6px;padding:4px 8px;font-size:0.7em;font-weight:600;cursor:pointer;
+  white-space:nowrap;transition:all 0.12s;-webkit-tap-highlight-color:transparent;
+}}
+.copy-row-btn:hover{{background:rgba(102,126,234,0.4);color:#fff;}}
+.copy-row-btn:active{{transform:scale(0.93);}}
+.toast{{
+  position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.85);color:#fff;padding:7px 18px;
+  border-radius:20px;font-size:0.8em;opacity:0;
+  transition:opacity 0.2s;pointer-events:none;z-index:9999;white-space:nowrap;
+}}
+.toast.show{{opacity:1;}}
+.tbl-scroll{{max-height:480px;overflow-y:auto;}}
+.tbl-scroll::-webkit-scrollbar{{width:6px;}}
+.tbl-scroll::-webkit-scrollbar-track{{background:rgba(255,255,255,0.05);}}
+.tbl-scroll::-webkit-scrollbar-thumb{{background:rgba(102,126,234,0.4);border-radius:3px;}}
+</style></head><body>
 
-                    st.markdown(f"<div style='max-height:520px;overflow-y:auto;padding:2px;'>{cards}</div>",
-                                unsafe_allow_html=True)
+<div class="tbl-wrap">
+  <div class="tbl-header">
+    <span id="rowCount">Loading...</span>
+    <button class="copy-all-btn" onclick="copyAll()">📋 Copy All as CSV</button>
+  </div>
+  <div class="tbl-scroll">
+    <table id="spanTable">
+      <thead>
+        <tr>
+          <th style="width:36%">📝 Text</th>
+          <th style="width:22%">🔤 Font</th>
+          <th style="width:8%">📏 Size</th>
+          <th style="width:12%">🎨 Color</th>
+          <th style="width:14%">✨ Flags</th>
+          <th style="width:8%">Copy</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
 
+<script>
+var ROWS = {rows_json};
+
+function render(){{
+  var tbody=document.getElementById('tbody');
+  var html='';
+  ROWS.forEach(function(r,i){{
+    var lum=parseInt(r.color.slice(1,3),16)*0.299+parseInt(r.color.slice(3,5),16)*0.587+parseInt(r.color.slice(5,7),16)*0.114;
+    var tc=lum>128?'#000':'#fff';
+    var badges='';
+    if(r.bold)   badges+='<span class="badge badge-bold">B Bold</span>';
+    if(r.italic) badges+='<span class="badge badge-italic">I Italic</span>';
+    if(r.mono)   badges+='<span class="badge badge-mono">⌨ Mono</span>';
+    html+='<tr>'
+      +'<td><div class="td-text" title="'+esc(r.text)+'">'+esc(r.text)+'</div></td>'
+      +'<td class="td-font">'+esc(r.font)+'</td>'
+      +'<td class="td-size">'+r.size+'</td>'
+      +'<td><span class="color-pill" style="background:'+r.color+';color:'+tc+';">'
+      +'<span class="color-dot" style="background:'+r.color+';"></span>'+r.color+'</span></td>'
+      +'<td><div class="td-badges">'+badges+'</div></td>'
+      +'<td><button class="copy-row-btn" onclick="copyRow('+i+')">Copy</button></td>'
+      +'</tr>';
+  }});
+  tbody.innerHTML=html;
+  document.getElementById('rowCount').textContent=ROWS.length+' text spans';
+}}
+
+function esc(s){{
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}}
+
+function copyRow(i){{
+  var r=ROWS[i];
+  var txt=r.text+'\\t'+r.font+'\\t'+r.size+' pt\\t'+r.color
+          +(r.bold?' Bold':'')+(r.italic?' Italic':'')+(r.mono?' Mono':'');
+  copyText(txt,'Row copy ho gaya ✅');
+}}
+
+function copyAll(){{
+  var lines=['Text,Font,Size,Color,Bold,Italic,Mono'];
+  ROWS.forEach(function(r){{
+    lines.push('"'+r.text.replace(/"/g,'""')+'","'+r.font+'",'+r.size+',"'+r.color+'",'+r.bold+','+r.italic+','+r.mono);
+  }});
+  copyText(lines.join('\\n'),ROWS.length+' rows CSV copy ho gaya ✅');
+}}
+
+function copyText(txt,msg){{
+  if(navigator.clipboard&&navigator.clipboard.writeText){{
+    navigator.clipboard.writeText(txt).then(function(){{showToast(msg);}});
+  }}else{{
+    var ta=document.createElement('textarea');
+    ta.value=txt;ta.style.cssText='position:fixed;opacity:0;top:0;left:0;';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    try{{document.execCommand('copy');showToast(msg);}}catch(e){{}}
+    document.body.removeChild(ta);
+  }}
+}}
+
+function showToast(msg){{
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(function(){{t.classList.remove('show');}},2000);
+}}
+
+render();
+</script>
+</body></html>""", height=540, scrolling=False)
+
+                    # CSV download button below
                     df_dl=pd.DataFrame([{"Text":s["text"],"Font":s["font"],
-                        "Size":s["size"],"Color":s["color"],
-                        "Bold":s["bold"],"Italic":s["italic"]} for s in fspans])
-                    st.download_button("⬇ Download CSV",df_dl.to_csv(index=False).encode(),
-                                       f"p{ipg}_spans.csv","text/csv",use_container_width=True)
-                else: st.info("No text found.")
+                        "Size(pt)":s["size"],"Color":s["color"],
+                        "Bold":s["bold"],"Italic":s["italic"],"Mono":s["mono"]} for s in fspans])
+                    st.download_button("⬇ Download Full CSV",df_dl.to_csv(index=False).encode(),
+                                       f"spans_p{ipg}.csv","text/csv",use_container_width=True)
+                else: st.info("No text found on this page.")
 
             # ── FIND & REPLACE inside Inspector ──────────────
             st.markdown("---")
