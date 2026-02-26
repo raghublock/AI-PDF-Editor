@@ -151,144 +151,334 @@ if not st.session_state.donation_shown:
     CRYPTO_ADR = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
 
     if qr_b64:
-        qr_tag = f'<img src="data:image/png;base64,{qr_b64}" width="180" style="border-radius:10px;display:block;margin:8px auto;border:2px solid #667eea55;"/>'
+        qr_tag = f'<img src="data:image/png;base64,{qr_b64}" width="170" style="border-radius:10px;display:block;margin:6px auto;border:2px solid #667eea44;"/>'
     else:
-        qr_tag = (f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180'
-                  f'&color=667eea&data={enc_upi}" width="180" '
-                  f'style="border-radius:10px;display:block;margin:8px auto;" '
-                  f'onerror="this.style.display=\'none\'"/>')
+        qr_tag = (f'<img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170'
+                  f'&color=667eea&data={enc_upi}" width="170" '
+                  f'style="border-radius:10px;display:block;margin:6px auto;" '
+                  f'onerror="this.style.display:none"/>')
 
-    # ── Use components.v1.html so buttons are actually clickable ──
+    # Inject popup directly into Streamlit's parent DOM via postMessage trick
+    # The component sends JS up to the parent window to create a real fixed overlay
     st.components.v1.html(f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  *{{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}}
-  body{{background:rgba(0,0,0,0.72);display:flex;align-items:center;
-        justify-content:center;min-height:100vh;padding:12px;}}
-  .box{{background:#fff;border-radius:20px;padding:24px 20px;
-        max-width:400px;width:100%;text-align:center;
-        box-shadow:0 20px 60px rgba(0,0,0,0.35);}}
-  h2{{color:#667eea;font-size:1.3em;margin-bottom:4px;}}
-  .sub{{color:#555;font-size:0.85em;margin-bottom:4px;line-height:1.5;}}
-  .min-note{{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;
-             padding:6px 12px;font-size:0.8em;color:#856404;
-             margin-bottom:10px;font-weight:600;}}
-  .section-title{{font-size:0.78em;color:#888;margin:10px 0 4px;font-weight:600;
-                  text-transform:uppercase;letter-spacing:0.5px;}}
-  .upi-row{{display:flex;align-items:center;justify-content:center;gap:8px;
-            background:#f0f2f6;border:2px dashed #667eea;border-radius:10px;
-            padding:8px 12px;margin:4px 0 8px;}}
-  .upi-id{{font-family:monospace;font-size:1em;font-weight:700;color:#667eea;}}
-  .copy-btn{{background:#667eea;color:white;border:none;border-radius:6px;
-             padding:5px 10px;font-size:0.78em;font-weight:600;cursor:pointer;
-             flex-shrink:0;transition:all 0.2s;}}
-  .copy-btn:hover{{background:#764ba2;}}
-  .copy-btn:active{{transform:scale(0.95);}}
-  .crypto-box{{background:#1a1a2e;border-radius:10px;padding:10px 12px;
-               margin:4px 0 8px;word-break:break-all;}}
-  .crypto-addr{{font-family:monospace;font-size:0.75em;color:#a78bfa;font-weight:600;}}
-  .crypto-row{{display:flex;align-items:center;justify-content:space-between;gap:6px;}}
-  .copy-btn2{{background:#7c3aed;color:white;border:none;border-radius:6px;
-              padding:5px 10px;font-size:0.75em;font-weight:600;cursor:pointer;
-              flex-shrink:0;transition:all 0.2s;}}
-  .copy-btn2:hover{{background:#5b21b6;}}
-  .chains{{font-size:0.72em;color:#888;margin-top:4px;}}
-  .close-btn{{width:100%;background:linear-gradient(135deg,#667eea,#764ba2);
-              color:white;border:none;border-radius:12px;
-              padding:13px;font-size:1em;font-weight:700;cursor:pointer;
-              margin-top:12px;transition:all 0.2s;
-              -webkit-tap-highlight-color:transparent;}}
-  .close-btn:hover{{opacity:0.92;transform:translateY(-1px);}}
-  .close-btn:active{{transform:scale(0.98);opacity:1;}}
-  .footer-note{{font-size:0.72em;color:#bbb;margin-top:8px;}}
-  .toast{{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-          background:#333;color:white;padding:8px 18px;border-radius:20px;
-          font-size:0.82em;opacity:0;transition:opacity 0.3s;pointer-events:none;
-          white-space:nowrap;z-index:999;}}
-  .toast.show{{opacity:1;}}
-</style>
-</head>
-<body>
-<div class="box" id="donBox">
-  <div style="font-size:2em;margin-bottom:4px;">🙏</div>
-  <h2>Support Raghu's Work!</h2>
-  <p class="sub">Yeh tool free hai — agar helpful laga toh<br>ek chhoti si chai ki kimat donate karo! ☕</p>
-  <div class="min-note">💛 Minimum donation: sirf ₹10</div>
-
-  <!-- UPI Section -->
-  <div class="section-title">🇮🇳 UPI / Indian Payment</div>
-  {qr_tag}
-  <p style="font-size:0.75em;color:#888;margin:4px 0 2px;">Scan karo ya ID copy karke kisi bhi UPI app mein bhejo</p>
-  <div class="upi-row">
-    <span class="upi-id" id="upiId">{UPI_ID}</span>
-    <button class="copy-btn" onclick="copyText('{UPI_ID}','UPI ID copy ho gaya! ✅')">Copy</button>
-  </div>
-  <p style="font-size:0.72em;color:#aaa;margin-bottom:8px;">GPay · PhonePe · Paytm · BHIM — koi bhi UPI app chalega</p>
-
-  <!-- Crypto Section -->
-  <div class="section-title">🌍 Crypto / International Donation</div>
-  <p style="font-size:0.75em;color:#888;margin:2px 0 4px;">
-    EVM Wallet Address (ETH / MATIC / BNB / USDT — koi bhi EVM chain pe bhej sakte ho)
-  </p>
-  <div class="crypto-box">
-    <div class="crypto-row">
-      <span class="crypto-addr" id="cryptoAddr">{CRYPTO_ADR}</span>
-      <button class="copy-btn2" onclick="copyText('{CRYPTO_ADR}','Wallet address copy ho gaya! ✅')">Copy</button>
-    </div>
-  </div>
-  <p class="chains">✅ Supported chains: Ethereum · Polygon · BSC · Arbitrum · Optimism · Base<br>
-  Supported tokens: ETH · MATIC · BNB · USDT · USDC · any ERC-20</p>
-
-  <button class="close-btn" id="closeBtn" onclick="closeDonation()">
-    ✅ Thanks! Ab App Use Karo
-  </button>
-  <p class="footer-note">Donation optional hai — app hamesha free rahega 💙</p>
-</div>
-<div class="toast" id="toast"></div>
-
+<!DOCTYPE html><html><head>
 <script>
-  function copyText(txt, msg) {{
-    if (navigator.clipboard && navigator.clipboard.writeText) {{
-      navigator.clipboard.writeText(txt).then(function() {{ showToast(msg); }});
-    }} else {{
-      var ta = document.createElement('textarea');
-      ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
-      document.body.appendChild(ta); ta.focus(); ta.select();
-      try {{ document.execCommand('copy'); showToast(msg); }} catch(e) {{}}
+// Inject overlay into the parent Streamlit page
+(function(){{
+  var UPI    = '{UPI_ID}';
+  var CRYPTO = '{CRYPTO_ADR}';
+  var QR_B64 = '{qr_b64}';
+  var QR_URL = 'https://api.qrserver.com/v1/create-qr-code/?size=170x170&color=667eea&data={enc_upi}';
+
+  var qrHtml = QR_B64
+    ? '<img src="data:image/png;base64,'+QR_B64+'" width="160" style="border-radius:10px;display:block;margin:6px auto;border:2px solid #667eea44;box-shadow:0 4px 12px rgba(102,126,234,0.2);">'
+    : '<img src="'+QR_URL+'" width="160" style="border-radius:10px;display:block;margin:6px auto;" onerror="this.style.display=\'none\'">';
+
+  var css = `
+    #raghu-don-overlay{{
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(10,10,30,0.78);z-index:999999;
+      display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+      font-family:'Inter','Segoe UI',sans-serif;
+      animation:donFadeIn 0.3s ease;
+    }}
+    @keyframes donFadeIn{{from{{opacity:0}}to{{opacity:1}}}}
+    #raghu-don-box{{
+      background:#fff;border-radius:22px;padding:22px 20px 18px;
+      max-width:380px;width:92%;text-align:center;
+      box-shadow:0 24px 80px rgba(0,0,0,0.4);
+      max-height:90vh;overflow-y:auto;
+      animation:donSlideUp 0.35s cubic-bezier(.34,1.56,.64,1);
+    }}
+    @keyframes donSlideUp{{from{{transform:translateY(40px);opacity:0}}to{{transform:translateY(0);opacity:1}}}}
+    #raghu-don-box h2{{color:#667eea;font-size:1.25em;margin:4px 0 3px;font-weight:700;}}
+    .don-sub{{color:#555;font-size:0.83em;line-height:1.5;margin-bottom:6px;}}
+    .don-min{{background:#fff8e1;border:1.5px solid #ffc107;border-radius:20px;
+              padding:4px 14px;font-size:0.78em;color:#92600a;font-weight:700;
+              display:inline-block;margin-bottom:8px;}}
+    .don-sec{{font-size:0.7em;color:#999;font-weight:700;text-transform:uppercase;
+              letter-spacing:0.6px;margin:8px 0 4px;}}
+    .don-upi-row{{display:flex;align-items:center;gap:7px;
+                  background:#f3f4f8;border:2px dashed #667eea;
+                  border-radius:10px;padding:7px 10px;margin:3px 0 6px;}}
+    .don-upi-id{{font-family:monospace;font-size:0.95em;font-weight:700;
+                 color:#667eea;flex:1;text-align:left;word-break:break-all;}}
+    .don-crypto-row{{display:flex;align-items:center;gap:7px;
+                     background:#12122a;border-radius:10px;
+                     padding:8px 10px;margin:3px 0 5px;}}
+    .don-crypto-id{{font-family:monospace;font-size:0.68em;font-weight:600;
+                    color:#a78bfa;flex:1;text-align:left;word-break:break-all;}}
+    .don-cbtn{{border:none;border-radius:8px;padding:6px 12px;font-weight:700;
+               font-size:0.76em;cursor:pointer;flex-shrink:0;
+               -webkit-tap-highlight-color:transparent;transition:all 0.15s;}}
+    .don-cbtn-u{{background:#667eea;color:#fff;}}
+    .don-cbtn-u:active{{background:#4f46e5;transform:scale(0.93);}}
+    .don-cbtn-c{{background:#7c3aed;color:#fff;}}
+    .don-cbtn-c:active{{background:#5b21b6;transform:scale(0.93);}}
+    .don-apps{{font-size:0.68em;color:#bbb;margin:3px 0 6px;}}
+    .don-chains{{font-size:0.67em;color:#7c3aed;margin-top:4px;line-height:1.6;}}
+    .don-close{{width:100%;background:linear-gradient(135deg,#667eea,#764ba2);
+               color:#fff;border:none;border-radius:12px;padding:13px;
+               font-size:0.97em;font-weight:700;cursor:pointer;margin-top:10px;
+               -webkit-tap-highlight-color:transparent;
+               box-shadow:0 6px 20px rgba(102,126,234,0.4);
+               transition:all 0.2s;}}
+    .don-close:hover{{transform:translateY(-1px);box-shadow:0 10px 28px rgba(102,126,234,0.5);}}
+    .don-close:active{{transform:scale(0.97);}}
+    .don-foot{{font-size:0.68em;color:#ccc;margin-top:7px;}}
+    #don-toast{{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+                background:rgba(0,0,0,0.85);color:#fff;padding:8px 20px;
+                border-radius:24px;font-size:0.8em;opacity:0;
+                transition:opacity 0.25s;pointer-events:none;
+                z-index:9999999;white-space:nowrap;}}
+    #don-toast.show{{opacity:1;}}
+  `;
+
+  var html = `
+    <div id="raghu-don-overlay">
+      <div id="raghu-don-box">
+        <div style="font-size:2em;line-height:1;">🙏</div>
+        <h2>Support Raghu's Work!</h2>
+        <p class="don-sub">Yeh tool free hai — agar helpful laga toh<br>ek chhoti si chai ki kimat donate karo! ☕</p>
+        <span class="don-min">💛 Minimum donation: sirf ₹10</span>
+
+        <div class="don-sec">🇮🇳 UPI / Indian Payment</div>
+        `+qrHtml+`
+        <p style="font-size:0.72em;color:#aaa;margin:3px 0 2px;">Scan karo ya UPI ID copy karo</p>
+        <div class="don-upi-row">
+          <span class="don-upi-id">`+UPI+`</span>
+          <button class="don-cbtn don-cbtn-u" onclick="donCopy('`+UPI+`','UPI ID copy ho gaya ✅')">Copy</button>
+        </div>
+        <p class="don-apps">GPay · PhonePe · Paytm · BHIM · Any UPI App</p>
+
+        <div class="don-sec">🌍 Crypto / International</div>
+        <p style="font-size:0.7em;color:#888;margin:2px 0 3px;">EVM wallet — ETH/MATIC/BNB/USDT koi bhi chain pe</p>
+        <div class="don-crypto-row">
+          <span class="don-crypto-id">`+CRYPTO+`</span>
+          <button class="don-cbtn don-cbtn-c" onclick="donCopy('`+CRYPTO+`','Wallet copy ho gaya ✅')">Copy</button>
+        </div>
+        <p class="don-chains">✅ ETH · Polygon · BSC · Arbitrum · Optimism · Base<br>USDT · USDC · ETH · MATIC · BNB · any ERC-20</p>
+
+        <button class="don-close" onclick="donClose()">✅ Thanks! Ab App Use Karo</button>
+        <p class="don-foot">Donation optional hai — app hamesha free rahega 💙</p>
+      </div>
+    </div>
+    <div id="don-toast"></div>
+  `;
+
+  function donClose(){{
+    var el=document.getElementById('raghu-don-overlay');
+    if(el){{el.style.animation='donFadeOut 0.2s ease forwards';
+            setTimeout(function(){{if(el)el.remove();}},200);}}
+    var t=document.getElementById('don-toast');if(t)t.remove();
+  }}
+  function donCopy(txt,msg){{
+    if(navigator.clipboard&&navigator.clipboard.writeText){{
+      navigator.clipboard.writeText(txt).then(function(){{donToast(msg);}});
+    }}else{{
+      var ta=document.createElement('textarea');
+      ta.value=txt;ta.style.cssText='position:fixed;opacity:0;top:0;left:0;';
+      document.body.appendChild(ta);ta.focus();ta.select();
+      try{{document.execCommand('copy');donToast(msg);}}catch(e){{}}
       document.body.removeChild(ta);
     }}
   }}
-  function showToast(msg) {{
-    var t = document.getElementById('toast');
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(function(){{ t.classList.remove('show'); }}, 2200);
+  function donToast(msg){{
+    var t=document.getElementById('don-toast');
+    if(!t)return;t.textContent=msg;t.classList.add('show');
+    setTimeout(function(){{t.classList.remove('show');}},2000);
   }}
-  function closeDonation() {{
-    document.getElementById('donBox').style.display = 'none';
-    document.body.style.background = 'transparent';
-    // notify parent to collapse iframe
-    try {{ window.parent.postMessage('donationClosed','*'); }} catch(e){{}}
+
+  // Inject into parent window
+  function inject(win){{
+    try{{
+      // add style
+      var s=win.document.createElement('style');
+      s.id='raghu-don-style';s.textContent=css;
+      win.document.head.appendChild(s);
+      // add html
+      var div=win.document.createElement('div');
+      div.innerHTML=html;
+      win.document.body.appendChild(div);
+      // expose functions to parent
+      win.donClose=donClose;win.donCopy=donCopy;win.donToast=donToast;
+      // close on overlay background click
+      setTimeout(function(){{
+        var ov=win.document.getElementById('raghu-don-overlay');
+        if(ov)ov.addEventListener('click',function(e){{
+          if(e.target===ov)donClose();
+        }});
+      }},100);
+      // add fade-out keyframe
+      var s2=win.document.createElement('style');
+      s2.textContent='@keyframes donFadeOut{{to{{opacity:0}}}}';
+      win.document.head.appendChild(s2);
+    }}catch(e){{console.log('inject err',e);}}
   }}
-  // Also close on background tap
-  document.body.addEventListener('click', function(e) {{
-    if (e.target === document.body) closeDonation();
-  }});
+
+  // Try parent, then parent.parent (Streamlit double-iframe)
+  try{{inject(window.parent);}}catch(e){{}}
+  try{{inject(window.parent.parent);}}catch(e){{}}
+}})();
 </script>
-</body>
-</html>
-""", height=680, scrolling=False)
+</head><body style="background:transparent;margin:0;height:1px;"></body></html>
+""", height=1, scrolling=False)
     st.session_state.donation_shown = True
 
 # ─────────────────────────────────────────────
-# HEADER
+# HEADER  — animated, vibrant
 # ─────────────────────────────────────────────
 st.markdown("""
-<div class='app-header'>
-  <h1>🔵 Pro PDF Studio — by Raghu</h1>
-  <p>Advanced PDF Processing · Smart Editing · OCR · Page Inspector</p>
+<style>
+/* Animated gradient background for the whole page */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(160deg, #0f0c29, #302b63, #24243e);
+    min-height: 100vh;
+}
+[data-testid="stMain"] {
+    background: transparent;
+}
+/* Make main content area cards feel elevated */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
+    background: rgba(255,255,255,0.03);
+    border-radius: 16px;
+}
+/* Sidebar / top bar */
+[data-testid="stHeader"] { background: transparent; }
+
+/* Input fields */
+.stTextInput input, .stNumberInput input {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(102,126,234,0.4) !important;
+    color: #e0e0ff !important;
+    border-radius: 8px !important;
+}
+.stTextInput label, .stNumberInput label,
+.stSelectbox label, .stSlider label,
+.stCheckbox label, .stRadio label,
+.stFileUploader label { color: #c0c0e0 !important; }
+
+/* Selectbox */
+.stSelectbox div[data-baseweb="select"] > div {
+    background: rgba(255,255,255,0.07) !important;
+    border-color: rgba(102,126,234,0.4) !important;
+    color: #e0e0ff !important;
+}
+
+/* Metrics */
+[data-testid="metric-container"] {
+    background: rgba(102,126,234,0.12);
+    border: 1px solid rgba(102,126,234,0.25);
+    border-radius: 12px;
+    padding: 12px !important;
+}
+[data-testid="metric-container"] label { color: #a0a0cc !important; }
+[data-testid="metric-container"] [data-testid="stMetricValue"] { color: #fff !important; }
+
+/* Subheader */
+h3 { color: #e0e0ff !important; }
+.stMarkdown p { color: #c0c0dd; }
+.stCaption { color: #8888aa !important; }
+
+/* expander */
+.streamlit-expanderHeader { color: #c0c0ee !important; }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(102,126,234,0.2);
+}
+.stTabs [data-baseweb="tab"] { color: #a0a0cc !important; }
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg,#667eea,#764ba2) !important;
+    color: white !important;
+}
+
+/* Span cards on dark bg */
+.span-card {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(102,126,234,0.25) !important;
+    color: #e0e0ff;
+}
+.span-card .sc-text { color: #f0f0ff !important; }
+.sc-chip { background: rgba(102,126,234,0.18) !important;
+           border-color: rgba(102,126,234,0.3) !important; color: #c0c0ee !important; }
+.sc-chip.bold   { background:rgba(255,193,7,0.15)!important;  color:#ffd54f!important; }
+.sc-chip.italic { background:rgba(13,202,240,0.12)!important; color:#80deea!important; }
+.sc-chip.mono   { background:rgba(102,126,234,0.2)!important; color:#9fa8da!important; }
+
+/* File uploader */
+[data-testid="stFileUploader"] {
+    background: rgba(102,126,234,0.07);
+    border: 2px dashed rgba(102,126,234,0.35);
+    border-radius: 12px;
+}
+
+/* Download button */
+.stDownloadButton button {
+    background: linear-gradient(135deg,#28a745,#20c997) !important;
+    color: white !important; border-radius: 10px !important;
+    border: none !important; font-weight: 600 !important;
+}
+
+/* Divider */
+hr { border-color: rgba(102,126,234,0.2) !important; }
+</style>
+
+<div style="
+  text-align:center;
+  padding:32px 20px 24px;
+  background: linear-gradient(135deg,rgba(102,126,234,0.9),rgba(118,75,162,0.95));
+  border-radius:24px;
+  margin-bottom:20px;
+  box-shadow:0 16px 48px rgba(102,126,234,0.4), 0 4px 12px rgba(0,0,0,0.3);
+  position:relative;
+  overflow:hidden;
+">
+  <!-- Background glow blobs -->
+  <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;
+    background:rgba(255,255,255,0.08);border-radius:50%;pointer-events:none;"></div>
+  <div style="position:absolute;bottom:-30px;left:-30px;width:120px;height:120px;
+    background:rgba(255,255,255,0.06);border-radius:50%;pointer-events:none;"></div>
+
+  <div style="font-size:2.6em;line-height:1;margin-bottom:8px;">🔵</div>
+  <h1 style="color:white;font-size:clamp(1.4em,4.5vw,2.3em);margin:0;
+             font-weight:800;letter-spacing:-0.5px;
+             text-shadow:0 2px 12px rgba(0,0,0,0.25);">
+    Pro PDF Studio
+    <span style="background:rgba(255,255,255,0.15);border-radius:20px;
+                 padding:2px 12px;font-size:0.55em;font-weight:600;
+                 vertical-align:middle;margin-left:6px;
+                 border:1px solid rgba(255,255,255,0.25);">v3.0</span>
+  </h1>
+  <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;
+            font-size:clamp(0.8em,2.2vw,1em);font-weight:400;">
+    Built by <strong style="color:#ffd54f;">Raghu</strong> &nbsp;·&nbsp;
+    Smart Editing &nbsp;·&nbsp; Page Inspector &nbsp;·&nbsp; OCR &nbsp;·&nbsp; Watermark
+  </p>
+
+  <!-- Feature pills -->
+  <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;">
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">📄 Text Extract</span>
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">🎨 Color Inspector</span>
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">🔤 63 Fonts</span>
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">✍ Signature</span>
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">🔍 OCR</span>
+    <span style="background:rgba(255,255,255,0.15);color:white;border-radius:20px;
+                 padding:4px 12px;font-size:0.72em;font-weight:600;
+                 border:1px solid rgba(255,255,255,0.2);">💧 Watermark</span>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
