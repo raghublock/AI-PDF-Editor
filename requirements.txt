@@ -6,3 +6,4 @@ pandas
 pytesseract
 pdf2image
 openpyxl
+qrcode[pil]
