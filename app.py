@@ -1093,7 +1093,7 @@ with tabs[1]:
                                            use_container_width=True)
                     with col_dl2:
                         xl_buf = io.BytesIO()
-                        with pd.ExcelWriter(xl_buf, engine="xlsxwriter") as w:
+                        with pd.ExcelWriter(xl_buf, engine="openpyxl") as w:
                             filtered.to_excel(w, sheet_name=f"Page{ins_page}", index=False)
                         st.download_button("⬇ Download as Excel", xl_buf.getvalue(),
                                            f"page{ins_page}_text_data.xlsx",
@@ -1101,6 +1101,98 @@ with tabs[1]:
                                            use_container_width=True)
                 else:
                     st.info("No text found on this page.")
+
+                # ═══════════════════════════════════════════════
+                # ✏️ FIND & REPLACE — directly inside Inspector
+                # ═══════════════════════════════════════════════
+                st.markdown("---")
+                st.markdown("### ✏️ Edit This Page — Find & Replace")
+                st.caption("Inspection ke baad seedha yahan se text replace karo, same page pe.")
+
+                with st.container():
+                    fe1, fe2 = st.columns(2)
+                    ins_find    = fe1.text_input("🔍 Find Text",    key="ins_find",    placeholder="Jo text dhundna hai")
+                    ins_replace = fe2.text_input("✏️ Replace With", key="ins_replace", placeholder="Jo text likhna hai")
+
+                    fc1, fc2, fc3 = st.columns(3)
+                    ins_font     = fc1.selectbox("Font", list(FONT_MAP.keys()), key="ins_font")
+                    ins_size     = fc2.number_input("Size", 4.0, 72.0, 12.0, 0.5, key="ins_fsize")
+                    ins_case     = fc3.checkbox("Case Sensitive", value=True, key="ins_case")
+
+                    fd1, fd2, fd3, fd4 = st.columns(4)
+                    ins_bold     = fd1.checkbox("Bold",   key="ins_bold")
+                    ins_italic   = fd2.checkbox("Italic", key="ins_italic")
+                    ins_tcol     = fd3.color_picker("Text Color", "#000000", key="ins_tcol")
+                    ins_bgcol    = fd4.color_picker("BG Color",   "#FFFFFF", key="ins_bgcol")
+
+                    # Scope: replace only on inspected page OR all pages
+                    ins_scope = st.radio(
+                        "Replace on which pages?",
+                        [f"Only Page {ins_page}", "All Pages"],
+                        horizontal=True, key="ins_scope"
+                    )
+
+                if st.button("✨ Apply Replace", use_container_width=True, key="ins_apply"):
+                    if not ins_find:
+                        st.warning("⚠️ Find text daalo.")
+                    elif not ins_replace:
+                        st.warning("⚠️ Replace text daalo.")
+                    else:
+                        with st.spinner("Processing..."):
+                            try:
+                                if ins_scope == "All Pages":
+                                    target_bytes = ins_bytes
+                                else:
+                                    # Extract only the target page, edit, then re-merge
+                                    target_bytes = ins_bytes
+
+                                push_undo(ins_bytes)
+
+                                if ins_scope == f"Only Page {ins_page}":
+                                    # Split: pages before + edited page + pages after
+                                    doc_tmp   = fitz.open(stream=ins_bytes, filetype="pdf")
+                                    total_tmp = len(doc_tmp)
+                                    doc_tmp.close()
+
+                                    parts = []
+                                    # Pages before
+                                    if ins_page > 1:
+                                        before = split_pdf_by_range(ins_bytes, f"1-{ins_page-1}")
+                                        parts.append(list(before.values())[0])
+
+                                    # Edit only target page (extracted as single-page PDF)
+                                    single = split_pdf_by_range(ins_bytes, str(ins_page))
+                                    single_bytes = list(single.values())[0]
+                                    edited_single, count = smart_find_replace(
+                                        single_bytes, ins_find, ins_replace,
+                                        ins_font, ins_size, ins_tcol, ins_bgcol,
+                                        ins_bold, ins_italic, ins_case
+                                    )
+                                    parts.append(edited_single)
+
+                                    # Pages after
+                                    if ins_page < total_tmp:
+                                        after = split_pdf_by_range(ins_bytes, f"{ins_page+1}-{total_tmp}")
+                                        parts.append(list(after.values())[0])
+
+                                    new_bytes = merge_pdfs(parts) if len(parts) > 1 else edited_single
+
+                                else:
+                                    new_bytes, count = smart_find_replace(
+                                        ins_bytes, ins_find, ins_replace,
+                                        ins_font, ins_size, ins_tcol, ins_bgcol,
+                                        ins_bold, ins_italic, ins_case
+                                    )
+                                    count = count  # already set
+
+                                st.success(f"✅ Text replace ho gaya!")
+                                st.info("👇 Edited PDF download karo:")
+                                download_btn(new_bytes, "edited_inspected.pdf")
+                                open_in_new_tab(new_bytes)
+
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                                logger.exception("Inspector Find & Replace failed")
 
 
 # ─────────────────────────────────────────────────────────
@@ -1351,7 +1443,7 @@ with tabs[7]:
                     st.success(f"✅ Found **{total}** table(s) across {len(all_tables)} page(s)")
 
                     excel_buf = io.BytesIO()
-                    with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+                    with pd.ExcelWriter(excel_buf, engine='openpyxl') as writer:
                         sheet_idx = 1
                         for page_num, dfs in all_tables.items():
                             for i, df in enumerate(dfs):
