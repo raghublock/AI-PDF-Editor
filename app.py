@@ -894,24 +894,24 @@ def inspect_page(pb:bytes,pg:int=0)->Dict:
 # TABS  — Merge/Split/Compress removed
 # ═══════════════════════════════════════════════
 TABS=[
-    "📘 Viewer & Editor",
-    "🎨 Page Inspector",
-    "🖼 Extract Images",
-    "📄 Extract Text",
-    "📊 Tables",
-    "📑 Reorder",
-    "✍ Signature",
-    "💧 Watermark",
-    "🔍 OCR",
-    "💙 Donate",
+    "💙 Donate",        # 0
+    "🎨 Page Inspector",# 1
+    "🖼 Extract Images",# 2
+    "📄 Extract Text",  # 3
+    "📊 Tables",        # 4
+    "📑 Reorder",       # 5
+    "✍ Signature",     # 6
+    "💧 Watermark",     # 7
+    "🔍 OCR",           # 8
+    "📘 Viewer & Editor",# 9
 ]
 tabs=st.tabs(TABS)
 
 
 # ══════════════════════════════════
-# T0 — VIEWER + FIND & REPLACE
+# T9 — VIEWER + FIND & REPLACE
 # ══════════════════════════════════
-with tabs[0]:
+with tabs[9]:
     # Donation banner at TOP of every tab
     CRYPTO_ADR_V = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
     st.components.v1.html(f"""<!DOCTYPE html><html><head>
@@ -1010,6 +1010,7 @@ function st(msg){{var t=document.getElementById('t');t.textContent=msg;
                                 st.session_state.viewer_pdf_bytes=nb
                                 st.success(f"✅ Replaced {cnt}×!")
                                 download_btn(nb,"edited.pdf"); open_in_new_tab(nb)
+                                whatsapp_share()
                                 # Donation nudge after success
                                 st.components.v1.html(f"""<!DOCTYPE html><html><head>
 <style>
@@ -1751,9 +1752,9 @@ with tabs[8]:
 
 
 # ══════════════════════════════════
-# T9 — DONATE
+# T0 — DONATE
 # ══════════════════════════════════
-with tabs[9]:
+with tabs[0]:
     st.subheader("💙 Support Raghu's Work")
     CRYPTO_ADR = "0x9c45F8098D1887EfFe84A4781c877f297D42604A"
     qr_d = make_qr_b64(UPI_LINK)
