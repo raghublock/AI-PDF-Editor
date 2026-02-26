@@ -796,7 +796,7 @@ def inspect_page_full(pdf_bytes: bytes, page_num: int = 0) -> Dict:
                 b2 = int(val[2] * 255)
                 hx = "#{:02x}{:02x}{:02x}".format(r2, g2, b2)
                 drawing_colors.append({"Color": hx, "Type": key,
-                                        "Width": round(draw.get("width", 0), 2)})
+                                        "Width": round(draw.get("width") or 0, 2)})
                 all_colors[hx] = all_colors.get(hx, 0) + 1
 
     # ── IMAGES COUNT ──
